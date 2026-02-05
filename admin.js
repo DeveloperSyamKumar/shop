@@ -157,7 +157,7 @@ function renderTable(orders) {
             <td>${date}</td>
             <td>${itemCount} items</td>
             <td style="font-weight: 600;">₹${order.amount.toFixed(2)}</td>
-            <td>${order.paymentMethod || 'UPI'}</td>
+
             <td><span class="status-badge" style="background: ${statusColor}; color: ${statusTextColor};">${status}</span></td>
             <td>
                 <button class="view-btn" data-id="${order.id}">Edit / Verify</button>
