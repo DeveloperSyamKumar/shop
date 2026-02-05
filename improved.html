@@ -766,6 +766,9 @@
             }
         }
 
+        // WhatsApp Configuration
+        const WHATSAPP_NUMBER = "9603655683";
+
         // Cart Controller
         class CartController {
             constructor(productController) {
@@ -776,11 +779,51 @@
                 const cartItems = this.productController.model.getCart();
                 const total = this.productController.model.getCartTotal();
                 this.productController.view.renderCart(cartItems, total);
+                
+                // Re-bind checkout button event after rendering
+                const checkoutBtn = document.querySelector('.checkout-btn');
+                if (checkoutBtn) {
+                    checkoutBtn.onclick = () => this.checkout();
+                }
+                
                 this.productController.view.openCart();
             }
 
             closeCart() {
                 this.productController.view.closeCart();
+            }
+
+            checkout() {
+                const cartItems = this.productController.model.getCart();
+                const total = this.productController.model.getCartTotal();
+                
+                if (cartItems.length === 0) {
+                    alert('Your cart is empty!');
+                    return;
+                }
+
+                let message = "🛍️ *New Order Request* 🛍️\n\n";
+                
+                cartItems.forEach((item, index) => {
+                    message += `${index + 1}. ${item.name} ` +
+                               `(${item.weight})\n   ` +
+                               `Qty: ${item.quantity} x ₹${item.price} = ₹${item.price * item.quantity}\n\n`;
+                });
+
+                const gst = total * 0.18;
+                const finalTotal = total + gst;
+
+                message += `----------------------------\n`;
+                message += `Subtotal: ₹${total.toFixed(2)}\n`;
+                message += `GST (18%): ₹${gst.toFixed(2)}\n`;
+                message += `*Total Amount: ₹${finalTotal.toFixed(2)}*\n`;
+                message += `----------------------------\n`;
+                message += `Please confirm my order!`;
+
+                const encodedMessage = encodeURIComponent(message);
+                const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+                
+                window.open(whatsappUrl, '_blank');
             }
         }
 
