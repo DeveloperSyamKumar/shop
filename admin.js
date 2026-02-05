@@ -145,7 +145,7 @@ function renderTable(orders) {
         let statusColor = '#dcfce7';
         let statusTextColor = '#16a34a';
         
-        if(status === 'Pending Verification') { statusColor = '#fff7ed'; statusTextColor = '#c2410c'; } // Orange for verify
+
         if(status === 'Pending') { statusColor = '#fef9c3'; statusTextColor = '#854d0e'; }
         if(status === 'Shipped') { statusColor = '#dbeafe'; statusTextColor = '#1e40af'; }
         if(status === 'Delivered') { statusColor = '#dcfce7'; statusTextColor = '#16a34a'; }
@@ -206,7 +206,7 @@ function showOrderDetails(order) {
                     <label style="font-size: 12px; color: var(--text-light); display: block; margin-bottom: 4px;">Order Status</label>
                     <div style="display: flex; gap: 8px;">
                         <select id="statusSelect" style="padding: 6px; border: 1px solid var(--border); border-radius: 4px;">
-                            <option value="Pending Verification" ${currentStatus === 'Pending Verification' ? 'selected' : ''}>Pending Verification</option>
+
                             <option value="Confirmed" ${currentStatus === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
                             <option value="Processing" ${currentStatus === 'Processing' ? 'selected' : ''}>Processing</option>
                             <option value="Shipped" ${currentStatus === 'Shipped' ? 'selected' : ''}>Shipped</option>
@@ -219,14 +219,7 @@ function showOrderDetails(order) {
             </div>
         </div>
 
-        <!-- UTR / Payment Info -->
-        <div style="background: var(--bg-light); padding: 12px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border);">
-            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Payment Reference (UTR)</div>
-            <div style="font-family: monospace; font-size: 16px; font-weight: 600; letter-spacing: 1px;">
-                ${order.paymentUTR ? order.paymentUTR : 'N/A (Older Order)'}  
-                ${order.paymentUTR ? '<span style="font-size: 12px; color: var(--text-light); font-weight: normal; margin-left: 8px;">(Verify this against your bank statement)</span>' : ''}
-            </div>
-        </div>
+
         
         <h3 style="font-size: 16px; margin-bottom: 12px;">Items</h3>
         <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
@@ -253,7 +246,7 @@ function showOrderDetails(order) {
                 <span>₹${(order.amount - (order.amount / 1.18)).toFixed(2)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; color: var(--primary);">
-                <span>Total Paid</span>
+                <span>Total Amount</span>
                 <span>₹${order.amount.toFixed(2)}</span>
             </div>
         </div>
