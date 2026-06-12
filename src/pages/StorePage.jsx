@@ -77,8 +77,7 @@ export default function StorePage() {
   // Checkout form details
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Cash on Delivery');
+  const [paymentMethod, setPaymentMethod] = useState('Cash at Counter');
   const [notes, setNotes] = useState('');
 
   // Back-to-top visibility
@@ -217,8 +216,7 @@ export default function StorePage() {
     const orderData = {
       customer: {
         name: customerName,
-        phone: customerPhone,
-        address: customerAddress
+        phone: customerPhone
       },
       items: orderItems,
       total: orderTotal,
@@ -233,26 +231,25 @@ export default function StorePage() {
       const savedOrder = await createOrder(orderData);
 
       // Construct WhatsApp Order Message
-      let message = `*NEW ORDER: Bujji akka kirana kottu*\n`;
-      message += `----------------------------------\n`;
+      let message = `🛍️ *WALK-IN ORDER – Bujji Akka Kirana Kottu*\n`;
+      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       message += `*Order ID:* ${savedOrder.id}\n`;
-      message += `*Customer:* ${customerName}\n`;
+      message += `*Name:* ${customerName}\n`;
       message += `*Phone:* ${customerPhone}\n`;
-      message += `*Delivery Address:* ${customerAddress}\n`;
       message += `*Payment:* ${paymentMethod}\n`;
       if (notes) message += `*Notes:* ${notes}\n`;
-      message += `----------------------------------\n`;
-      message += `*Items Ordered:*\n`;
+      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      message += `*Items:*\n`;
       
       cart.forEach((item, index) => {
         const itemSubtotal = item.variant.price * item.quantity;
-        message += `${index + 1}. _${item.product.name}_ (${item.variant.volume}) x ${item.quantity} = *₹${itemSubtotal}*\n`;
+        message += `${index + 1}. ${item.product.name} (${item.variant.volume}) × ${item.quantity} = *₹${itemSubtotal}*\n`;
       });
       
-      message += `----------------------------------\n`;
-      message += `*TOTAL AMOUNT:* *₹${orderTotal}*\n`;
-      message += `----------------------------------\n`;
-      message += `Thank you! Please check and confirm my order. 🙏`;
+      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      message += `*TOTAL: ₹${orderTotal}*\n`;
+      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      message += `I'm at your shop. Please pack my items, I'll collect at the counter. 🙏`;
 
       const encodedText = encodeURIComponent(message);
       // Bujji Akka WhatsApp number (can configure in admin, default is a fallback number)
@@ -270,7 +267,6 @@ export default function StorePage() {
       // Reset form
       setCustomerName('');
       setCustomerPhone('');
-      setCustomerAddress('');
       setNotes('');
 
     } catch (err) {
@@ -326,18 +322,40 @@ export default function StorePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-amber-50 via-orange-50/50 to-white py-12 border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-8">
-          <div className="max-w-2xl">
-            <span className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full mb-4">
-              Fresh Snacks &amp; Cool Drinks
+      <section className="bg-gradient-to-br from-amber-50 via-orange-50/50 to-white py-10 border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Top label */}
+          <div className="text-center mb-6">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              You're at the shop — Order right here!
             </span>
-            <h2 className="font-display text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Order Groceries <br className="hidden sm:inline" />
-              Directly on <span className="text-emerald-600">WhatsApp</span>
+          </div>
+
+          {/* 3-Step How it works */}
+          <div className="grid grid-cols-3 gap-4 mb-8 max-w-2xl mx-auto">
+            {[
+              { step: "1", icon: "🛍️", title: "Browse", desc: "Pick your items from the catalog" },
+              { step: "2", icon: "💬", title: "WhatsApp", desc: "Send your list to Bujji Akka" },
+              { step: "3", icon: "✅", title: "Collect", desc: "Pick up your items at the counter" }
+            ].map(({ step, icon, title, desc }) => (
+              <div key={step} className="text-center bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col items-center gap-2">
+                <div className="w-10 h-10 bg-amber-50 border border-amber-200 rounded-full flex items-center justify-center text-xl">{icon}</div>
+                <div className="w-5 h-5 bg-amber-500 text-white text-[10px] font-black rounded-full flex items-center justify-center -mt-1">{step}</div>
+                <p className="font-bold text-slate-900 text-sm">{title}</p>
+                <p className="text-slate-400 text-[11px] leading-tight hidden sm:block">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="sm:flex sm:items-start sm:justify-between gap-8">
+          <div className="max-w-2xl">
+            <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+              Browse. Send on <span className="text-emerald-600">WhatsApp.</span><br className="hidden sm:inline" />
+              <span className="text-amber-500">Collect at Counter.</span>
             </h2>
-            <p className="mt-4 text-lg text-slate-600">
-              Browse Golisoda, chilled soft drinks, authentic mixtures, and dairy products. Check out to instantly notify Bujji Akka on WhatsApp!
+            <p className="mt-3 text-base text-slate-500 max-w-lg">
+              You're here at Bujji Akka's store! Pick the items you need, add them to your cart, and tap <strong>"Send on WhatsApp"</strong> — Bujji Akka will pack your order and it'll be ready at the counter.
             </p>
           </div>
 
@@ -379,6 +397,7 @@ export default function StorePage() {
                 <p className="text-sm font-semibold text-slate-700">Visakhapatnam, Andhra Pradesh</p>
               </div>
             </div>
+          </div>
           </div>
         </div>
       </section>
@@ -692,10 +711,10 @@ export default function StorePage() {
                       </button>
                       <button
                         onClick={() => setIsCheckoutOpen(true)}
-                        className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 transition-colors duration-150"
+                        className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-colors duration-150"
                       >
-                        <span>Place Order</span>
-                        <ChevronRight className="w-4 h-4" />
+                        <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24"><path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.945 9.945 0 004.777 1.21h.005c5.505 0 9.99-4.478 9.99-9.986 0-2.67-1.037-5.178-2.924-7.066A9.919 9.919 0 0012.012 2z"/></svg>
+                        <span>Send on WhatsApp</span>
                       </button>
                     </div>
                   </div>
@@ -725,9 +744,13 @@ export default function StorePage() {
             </button>
 
             <h3 className="font-display font-bold text-xl text-slate-900 mb-1 flex items-center gap-2">
-              <span>🛍️ Order Confirmation</span>
+              <span>💬 Send Order on WhatsApp</span>
             </h3>
-            <p className="text-slate-500 text-xs mb-6">Enter your details. Bujji Akka will deliver or pack the order, and you'll complete details on WhatsApp.</p>
+            <p className="text-slate-500 text-xs mb-5">Tell Bujji Akka who you are. Your item list will be sent on WhatsApp — just show this message and collect at the counter!</p>
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-5">
+              <span className="text-amber-500 text-base">📍</span>
+              <p className="text-amber-800 text-xs font-semibold">Walk-in Pickup — Collect your items at the counter</p>
+            </div>
 
             <form onSubmit={handleCheckoutSubmit} className="space-y-4">
               <div>
@@ -772,38 +795,18 @@ export default function StorePage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="address">
-                  Delivery Address
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 pt-3 flex items-start text-slate-400">
-                    <MapPin className="w-4 h-4" />
-                  </span>
-                  <textarea
-                    id="address"
-                    required
-                    rows="3"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 pl-10 pr-4 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
-                    placeholder="E.g., Flat 201, Lakshmi Nivas, Main Road, Visakhapatnam"
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
-                  ></textarea>
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">
-                    Payment Mode
+                    Payment at Counter
                   </label>
                   <select
                     className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                   >
-                    <option value="Cash on Delivery">Cash on Delivery</option>
-                    <option value="UPI Pay on Delivery">UPI (Pay on Delivery)</option>
+                    <option value="Cash at Counter">Cash at Counter</option>
+                    <option value="UPI at Counter">UPI at Counter</option>
                   </select>
                 </div>
                 <div>
@@ -814,7 +817,7 @@ export default function StorePage() {
                     id="notes"
                     type="text"
                     className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
-                    placeholder="E.g., Bring change for ₹500"
+                    placeholder="E.g., extra cold, mix bag"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
@@ -871,17 +874,18 @@ export default function StorePage() {
             onClick={() => setIsOrderSuccess(false)}
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
           ></div>
-          <div className="relative w-full max-w-sm bg-white rounded-2xl border border-slate-100 shadow-2xl p-6 text-center space-y-4">
-            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto border border-emerald-200">
-              <CheckCircle className="w-10 h-10" />
-            </div>
-            <h3 className="font-display font-bold text-xl text-slate-900">Order Sent!</h3>
+          <div className="relative w-full max-w-sm bg-white rounded-2xl border border-slate-100 shadow-2xl p-6 text-center space-y-3">
+            <div className="text-5xl">✅</div>
+            <h3 className="font-display font-bold text-xl text-slate-900">Order Sent on WhatsApp!</h3>
             <p className="text-slate-500 text-sm">
-              Your order request was successfully generated and recorded. You have been redirected to WhatsApp to confirm with Bujji Akka.
+              Your item list has been sent to Bujji Akka on WhatsApp. Head to the counter — your order will be ready for pickup!
             </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 text-xs font-semibold flex items-center gap-2">
+              <span>📍</span> Collect your items at the counter
+            </div>
             <button
               onClick={() => setIsOrderSuccess(false)}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-sm transition-colors duration-150"
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors duration-150"
             >
               Continue Shopping
             </button>
@@ -897,9 +901,9 @@ export default function StorePage() {
             <p className="text-xs text-slate-500 mt-1">© {new Date().getFullYear()} Bujji Akka Kirana Kottu. All rights reserved.</p>
           </div>
           <div className="flex justify-center gap-4 text-xs">
-            <span className="text-slate-500">Quality Snacks & Soft Drinks</span>
+            <span className="text-slate-500">Browse · WhatsApp · Collect</span>
             <span className="text-slate-600">|</span>
-            <span className="text-slate-500">Fast Local Delivery</span>
+            <span className="text-slate-500">Walk-in Takeaway Store</span>
           </div>
         </div>
       </footer>
