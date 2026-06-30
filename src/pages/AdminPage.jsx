@@ -7,8 +7,6 @@ import {
   updateOrderStatus, 
   resetInventoryToDefault 
 } from '../lib/firestoreService';
-import { isMock } from '../lib/firebase';
-import { SEED_ITEMS } from '../lib/seedData';
 import { 
   ClipboardList, 
   Package, 
@@ -47,9 +45,10 @@ export default function AdminPage({ onLogout }) {
   const [items, setItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Shop WhatsApp Number setting
+  // Shop WhatsApp Number setting (kept in localStorage as it's a UI pref, not product data)
   const [shopWhatsApp, setShopWhatsApp] = useState(() => {
     return localStorage.getItem('satya_shop_whatsapp') || '919603655683';
   });
@@ -75,47 +74,22 @@ export default function AdminPage({ onLogout }) {
   });
 
   useEffect(() => {
-    // Load instantly from seed + localStorage, no spinner
-    const localOrders = (() => {
-      try { return JSON.parse(localStorage.getItem('satya_orders') || '[]'); } 
-      catch { return []; }
-    })();
-    setItems(SEED_ITEMS);
-    setOrders(localOrders);
-    calculateStats(SEED_ITEMS, localOrders);
-
-    // Background Firebase refresh with 4s timeout
-    const timeout = (ms) => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
-    Promise.all([
-      Promise.race([getItems(), timeout(4000)]),
-      Promise.race([getOrders(), timeout(4000)])
-    ])
-      .then(([liveItems, liveOrders]) => {
-        const finalItems = liveItems?.length > 0 ? liveItems : SEED_ITEMS;
-        const finalOrders = Array.isArray(liveOrders) ? liveOrders : localOrders;
-        setItems(finalItems);
-        setOrders(finalOrders);
-        calculateStats(finalItems, finalOrders);
-      })
-      .catch(err => {
-        console.warn('Admin: Firebase fetch skipped:', err.message);
-      });
+    loadAllData();
   }, []);
 
   const loadAllData = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const timeout = (ms) => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
-      const [allItems, allOrders] = await Promise.all([
-        Promise.race([getItems(), timeout(4000)]),
-        Promise.race([getOrders(), timeout(4000)])
-      ]);
-      const finalItems = allItems?.length > 0 ? allItems : SEED_ITEMS;
-      const finalOrders = Array.isArray(allOrders) ? allOrders : orders;
-      setItems(finalItems);
-      setOrders(finalOrders);
-      calculateStats(finalItems, finalOrders);
+      const [allItems, allOrders] = await Promise.all([getItems(), getOrders()]);
+      setItems(allItems);
+      setOrders(allOrders);
+      calculateStats(allItems, allOrders);
     } catch (err) {
-      console.warn('Refresh failed:', err.message);
+      console.error('Failed to load data from Firestore:', err);
+      setError('Unable to connect to Firebase. Please check your internet connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -374,9 +348,28 @@ export default function AdminPage({ onLogout }) {
 
         {/* Tab Content */}
         <section className="bg-slate-800/50 backdrop-blur-sm border border-slate-800 rounded-3xl p-6 shadow-xl">
-            
+
+            {/* Loading State */}
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="font-medium">Loading data from Firebase...</p>
+              </div>
+            )}
+
+            {/* Error State */}
+            {!loading && error && (
+              <div className="text-center py-16">
+                <p className="text-red-400 font-semibold">{error}</p>
+                <button
+                  onClick={loadAllData}
+                  className="mt-4 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl transition-all duration-150"
+                >Retry</button>
+              </div>
+            )}
+
             {/* ORDERS TAB */}
-            {activeTab === 'orders' && (
+            {!loading && !error && activeTab === 'orders' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h2 className="font-display font-bold text-lg text-white">Active Customer Orders Queue</h2>
@@ -475,7 +468,7 @@ export default function AdminPage({ onLogout }) {
             )}
 
             {/* INVENTORY TAB */}
-            {activeTab === 'inventory' && (
+            {!loading && !error && activeTab === 'inventory' && (
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <h2 className="font-display font-bold text-lg text-white">Manage Products Stock Catalog</h2>
@@ -585,7 +578,7 @@ export default function AdminPage({ onLogout }) {
             )}
 
             {/* SETTINGS TAB */}
-            {activeTab === 'settings' && (
+            {!loading && !error && activeTab === 'settings' && (
               <div className="space-y-8 max-w-xl">
                 
                 {/* Connection Status */}
@@ -594,15 +587,12 @@ export default function AdminPage({ onLogout }) {
                     <Database className="w-5 h-5 text-amber-500" />
                     <span>Database Engine Status</span>
                   </h3>
-                  
                   <div className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${isMock ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-                    <span className="font-semibold text-sm">
-                      {isMock ? 'Running on Local Storage (Fallback Mode)' : 'Connected to Cloud Firebase Firestore'}
-                    </span>
+                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span className="font-semibold text-sm">Connected to Cloud Firebase Firestore</span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    To connect to your cloud database, please supply the `VITE_FIREBASE_API_KEY` environmental variable inside the `.env` configuration file in the project directory.
+                    Project: <span className="text-slate-300 font-mono">{import.meta.env.VITE_FIREBASE_PROJECT_ID}</span> — All data is stored in the cloud.
                   </p>
                 </div>
 

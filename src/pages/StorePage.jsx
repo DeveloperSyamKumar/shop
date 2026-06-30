@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { getItems, createOrder } from '../lib/firestoreService';
-import { isMock } from '../lib/firebase';
-import { SEED_ITEMS } from '../lib/seedData';
 import { 
   ShoppingBag, 
   Search, 
@@ -62,6 +60,7 @@ const CATEGORY_GRADIENTS = {
 export default function StorePage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Items');
   
@@ -88,50 +87,26 @@ export default function StorePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fetch items — load seed data instantly, then refresh from Firebase in background
+  // Fetch items from Firestore on mount
   useEffect(() => {
-    // Helper to init variant selections
     const initVariants = (data) => {
       const initialVariants = {};
       data.forEach(item => { initialVariants[item.id] = 0; });
       return initialVariants;
     };
 
-    // Load from localStorage first (captures any admin panel edits),
-    // fallback to SEED_ITEMS if localStorage is empty/invalid
-    const getLocalItems = () => {
-      try {
-        const stored = localStorage.getItem('satya_items');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].variants && parsed[0].id) {
-            return parsed;
-          }
-        }
-      } catch (e) { /* ignore */ }
-      return SEED_ITEMS;
-    };
-
-    const localItems = getLocalItems();
-    setItems(localItems);
-    setSelectedVariants(initVariants(localItems));
-    setLoading(false);
-
-    // Then try to fetch live data from Firebase with a 4s timeout
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firebase timeout')), 4000)
-    );
-
-    Promise.race([getItems(), timeout])
+    setLoading(true);
+    setError(null);
+    getItems()
       .then(data => {
-        if (data && data.length > 0) {
-          setItems(data);
-          setSelectedVariants(initVariants(data));
-        }
+        setItems(data);
+        setSelectedVariants(initVariants(data));
       })
       .catch(err => {
-        console.warn("Firebase fetch skipped, using local data:", err.message);
-      });
+        console.error('Failed to load items from Firestore:', err);
+        setError('Unable to connect to the store. Please check your internet connection and refresh.');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const handleVariantChange = (productId, variantIndex) => {
@@ -300,13 +275,6 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Top Banner Warning if local storage mode */}
-      {isMock && (
-        <div className="bg-amber-500 text-slate-950 px-4 py-2 text-center text-sm font-semibold flex items-center justify-center gap-2 shadow-inner">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>Demo Mode active: Firestore connection is offline. Orders and products will be saved locally.</span>
-        </div>
-      )}
 
       {/* Header bar */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200">
@@ -503,7 +471,17 @@ export default function StorePage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="font-medium">Loading Satya General Store's inventory...</p>
+              <p className="font-medium">Loading products from Satya General Store...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-16 bg-white rounded-2xl border border-red-100 p-8 shadow-sm">
+              <AlertTriangle className="w-16 h-16 text-red-300 mx-auto mb-4" />
+              <h3 className="font-display font-bold text-lg text-slate-800">Connection Error</h3>
+              <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-all duration-150"
+              >Retry</button>
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
