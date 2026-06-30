@@ -97,9 +97,24 @@ export default function StorePage() {
       return initialVariants;
     };
 
-    // Show seed data immediately so the page never buffers
-    setItems(SEED_ITEMS);
-    setSelectedVariants(initVariants(SEED_ITEMS));
+    // Load from localStorage first (captures any admin panel edits),
+    // fallback to SEED_ITEMS if localStorage is empty/invalid
+    const getLocalItems = () => {
+      try {
+        const stored = localStorage.getItem('satya_items');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].variants && parsed[0].id) {
+            return parsed;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return SEED_ITEMS;
+    };
+
+    const localItems = getLocalItems();
+    setItems(localItems);
+    setSelectedVariants(initVariants(localItems));
     setLoading(false);
 
     // Then try to fetch live data from Firebase with a 4s timeout
@@ -115,7 +130,7 @@ export default function StorePage() {
         }
       })
       .catch(err => {
-        console.warn("Firebase fetch skipped, using seed data:", err.message);
+        console.warn("Firebase fetch skipped, using local data:", err.message);
       });
   }, []);
 
