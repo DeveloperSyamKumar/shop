@@ -6,17 +6,17 @@ import AdminPage from './pages/AdminPage'
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => {
-    return localStorage.getItem('bujji_admin_logged_in') === 'true';
+    return localStorage.getItem('satya_admin_logged_in') === 'true';
   });
 
   const handleLogin = () => {
     setIsAdmin(true);
-    localStorage.setItem('bujji_admin_logged_in', 'true');
+    localStorage.setItem('satya_admin_logged_in', 'true');
   };
 
   const handleLogout = () => {
     setIsAdmin(false);
-    localStorage.removeItem('bujji_admin_logged_in');
+    localStorage.removeItem('satya_admin_logged_in');
   };
 
   return (

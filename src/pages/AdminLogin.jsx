@@ -42,7 +42,7 @@ export default function AdminLogin({ onLogin }) {
           <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mb-4 text-amber-500">
             <ShoppingBag className="w-8 h-8" />
           </div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-white">Bujji akka kirana kottu</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-white">Satya General Store</h1>
           <p className="text-slate-400 text-sm mt-1">Admin Panel</p>
         </div>
 

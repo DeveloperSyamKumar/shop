@@ -20,14 +20,14 @@ const getLocalData = (key, defaultVal) => {
   try {
     const parsed = JSON.parse(data);
     // Sanity check to protect against stale/corrupt localStorage data from previous runs
-    if (key === 'bujji_items') {
+    if (key === 'satya_items') {
       if (!Array.isArray(parsed) || parsed.length === 0 || !parsed[0].variants || !parsed[0].id || !parsed[0].imageUrl) {
-        console.warn("Invalid or outdated localStorage format for bujji_items. Re-seeding database.");
+        console.warn("Invalid or outdated localStorage format for satya_items. Re-seeding database.");
         localStorage.setItem(key, JSON.stringify(defaultVal));
         return defaultVal;
       }
     }
-    if (key === 'bujji_orders') {
+    if (key === 'satya_orders') {
       if (!Array.isArray(parsed)) {
         localStorage.setItem(key, JSON.stringify([]));
         return [];
@@ -47,7 +47,7 @@ const setLocalData = (key, val) => {
 // GET ITEMS
 export const getItems = async () => {
   if (isMock) {
-    return getLocalData('bujji_items', SEED_ITEMS);
+    return getLocalData('satya_items', SEED_ITEMS);
   }
   try {
     const q = query(collection(db, 'items'));
@@ -67,21 +67,21 @@ export const getItems = async () => {
     return items;
   } catch (error) {
     console.error("Error fetching items from Firestore:", error);
-    return getLocalData('bujji_items', SEED_ITEMS);
+    return getLocalData('satya_items', SEED_ITEMS);
   }
 };
 
 // SAVE ITEM (Add or Update)
 export const saveItem = async (item) => {
   if (isMock) {
-    const items = getLocalData('bujji_items', SEED_ITEMS);
+    const items = getLocalData('satya_items', SEED_ITEMS);
     const existingIndex = items.findIndex(i => i.id === item.id);
     if (existingIndex > -1) {
       items[existingIndex] = item;
     } else {
       items.push(item);
     }
-    setLocalData('bujji_items', items);
+    setLocalData('satya_items', items);
     return item;
   }
   try {
@@ -97,9 +97,9 @@ export const saveItem = async (item) => {
 // DELETE ITEM
 export const deleteItem = async (itemId) => {
   if (isMock) {
-    const items = getLocalData('bujji_items', SEED_ITEMS);
+    const items = getLocalData('satya_items', SEED_ITEMS);
     const updated = items.filter(i => i.id !== itemId);
-    setLocalData('bujji_items', updated);
+    setLocalData('satya_items', updated);
     return;
   }
   try {
@@ -113,7 +113,7 @@ export const deleteItem = async (itemId) => {
 // RESET INVENTORY TO DEFAULT
 export const resetInventoryToDefault = async () => {
   if (isMock) {
-    setLocalData('bujji_items', SEED_ITEMS);
+    setLocalData('satya_items', SEED_ITEMS);
     return SEED_ITEMS;
   }
   try {
@@ -136,7 +136,7 @@ export const resetInventoryToDefault = async () => {
 // GET ORDERS
 export const getOrders = async () => {
   if (isMock) {
-    return getLocalData('bujji_orders', []);
+    return getLocalData('satya_orders', []);
   }
   try {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -148,7 +148,7 @@ export const getOrders = async () => {
     return orders;
   } catch (error) {
     console.error("Error fetching orders from Firestore:", error);
-    return getLocalData('bujji_orders', []);
+    return getLocalData('satya_orders', []);
   }
 };
 
@@ -162,9 +162,9 @@ export const createOrder = async (order) => {
   };
 
   if (isMock) {
-    const orders = getLocalData('bujji_orders', []);
+    const orders = getLocalData('satya_orders', []);
     orders.unshift(newOrder);
-    setLocalData('bujji_orders', orders);
+    setLocalData('satya_orders', orders);
     return newOrder;
   }
   try {
@@ -179,11 +179,11 @@ export const createOrder = async (order) => {
 // UPDATE ORDER STATUS
 export const updateOrderStatus = async (orderId, status) => {
   if (isMock) {
-    const orders = getLocalData('bujji_orders', []);
+    const orders = getLocalData('satya_orders', []);
     const existingIndex = orders.findIndex(o => o.id === orderId);
     if (existingIndex > -1) {
       orders[existingIndex].status = status;
-      setLocalData('bujji_orders', orders);
+      setLocalData('satya_orders', orders);
     }
     return;
   }

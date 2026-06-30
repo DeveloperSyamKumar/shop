@@ -51,7 +51,7 @@ export default function AdminPage({ onLogout }) {
 
   // Shop WhatsApp Number setting
   const [shopWhatsApp, setShopWhatsApp] = useState(() => {
-    return localStorage.getItem('bujji_shop_whatsapp') || '919603655683';
+    return localStorage.getItem('satya_shop_whatsapp') || '919603655683';
   });
 
   // Modal State for Products
@@ -77,7 +77,7 @@ export default function AdminPage({ onLogout }) {
   useEffect(() => {
     // Load instantly from seed + localStorage, no spinner
     const localOrders = (() => {
-      try { return JSON.parse(localStorage.getItem('bujji_orders') || '[]'); } 
+      try { return JSON.parse(localStorage.getItem('satya_orders') || '[]'); } 
       catch { return []; }
     })();
     setItems(SEED_ITEMS);
@@ -161,7 +161,7 @@ export default function AdminPage({ onLogout }) {
   };
 
   const handleSaveWhatsAppNumber = () => {
-    localStorage.setItem('bujji_shop_whatsapp', shopWhatsApp);
+    localStorage.setItem('satya_shop_whatsapp', shopWhatsApp);
     alert("WhatsApp recipient number updated successfully!");
   };
 
@@ -272,8 +272,8 @@ export default function AdminPage({ onLogout }) {
               <Package className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-display text-xl font-bold tracking-tight text-white">Bujji Akka's Dashboard</h1>
-              <p className="text-xs text-amber-500 font-semibold tracking-wider uppercase">Bujji akka kirana kottu Management</p>
+              <h1 className="font-display text-xl font-bold tracking-tight text-white">Satya General Store Dashboard</h1>
+              <p className="text-xs text-amber-500 font-semibold tracking-wider uppercase">Satya General Store Management</p>
             </div>
           </div>
 
@@ -613,7 +613,7 @@ export default function AdminPage({ onLogout }) {
                     <span>WhatsApp Order Settings</span>
                   </h3>
                   <div>
-                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Bujji Akka WhatsApp Recipient Number</label>
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Satya General Store WhatsApp Recipient Number</label>
                     <div className="flex gap-2">
                       <input
                         type="text"

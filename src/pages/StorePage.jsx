@@ -231,7 +231,7 @@ export default function StorePage() {
       const savedOrder = await createOrder(orderData);
 
       // Construct WhatsApp Order Message
-      let message = `🛍️ *WALK-IN ORDER – Bujji Akka Kirana Kottu*\n`;
+      let message = `🛍️ *WALK-IN ORDER – Satya General Store*\n`;
       message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       message += `*Order ID:* ${savedOrder.id}\n`;
       message += `*Name:* ${customerName}\n`;
@@ -252,8 +252,8 @@ export default function StorePage() {
       message += `I'm at your shop. Please pack my items, I'll collect at the counter. 🙏`;
 
       const encodedText = encodeURIComponent(message);
-      // Bujji Akka WhatsApp number (can configure in admin, default is a fallback number)
-      const shopWhatsApp = localStorage.getItem('bujji_shop_whatsapp') || '919603655683';
+      // Satya General Store WhatsApp number (can configure in admin, default is a fallback number)
+      const shopWhatsApp = localStorage.getItem('satya_shop_whatsapp') || '919603655683';
       const whatsappUrl = `https://api.whatsapp.com/send?phone=${shopWhatsApp}&text=${encodedText}`;
 
       // Open WhatsApp in new tab
@@ -302,7 +302,7 @@ export default function StorePage() {
             </div>
             <div>
               <h1 className="font-display text-xl sm:text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                Bujji akka kirana kottu
+                Satya General Store
               </h1>
             </div>
           </div>
@@ -336,7 +336,7 @@ export default function StorePage() {
           <div className="grid grid-cols-3 gap-4 mb-8 max-w-2xl mx-auto">
             {[
               { step: "1", icon: "🛍️", title: "Browse", desc: "Pick your items from the catalog" },
-              { step: "2", icon: "💬", title: "WhatsApp", desc: "Send your list to Bujji Akka" },
+              { step: "2", icon: "💬", title: "WhatsApp", desc: "Send your list to the store" },
               { step: "3", icon: "✅", title: "Collect", desc: "Pick up your items at the counter" }
             ].map(({ step, icon, title, desc }) => (
               <div key={step} className="text-center bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col items-center gap-2">
@@ -355,7 +355,7 @@ export default function StorePage() {
               <span className="text-amber-500">Collect at Counter.</span>
             </h2>
             <p className="mt-3 text-base text-slate-500 max-w-lg">
-              You're here at Bujji Akka's store! Pick the items you need, add them to your cart, and tap <strong>"Send on WhatsApp"</strong> — Bujji Akka will pack your order and it'll be ready at the counter.
+              You're here at Satya General Store! Pick the items you need, add them to your cart, and tap <strong>"Send on WhatsApp"</strong> — the store will pack your order and it'll be ready at the counter.
             </p>
           </div>
 
@@ -488,7 +488,7 @@ export default function StorePage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="font-medium">Loading Bujji Akka's inventory...</p>
+              <p className="font-medium">Loading Satya General Store's inventory...</p>
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
@@ -746,7 +746,7 @@ export default function StorePage() {
             <h3 className="font-display font-bold text-xl text-slate-900 mb-1 flex items-center gap-2">
               <span>💬 Send Order on WhatsApp</span>
             </h3>
-            <p className="text-slate-500 text-xs mb-5">Tell Bujji Akka who you are. Your item list will be sent on WhatsApp — just show this message and collect at the counter!</p>
+            <p className="text-slate-500 text-xs mb-5">Tell the store who you are. Your item list will be sent on WhatsApp — just show this message and collect at the counter!</p>
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-5">
               <span className="text-amber-500 text-base">📍</span>
               <p className="text-amber-800 text-xs font-semibold">Walk-in Pickup — Collect your items at the counter</p>
@@ -878,7 +878,7 @@ export default function StorePage() {
             <div className="text-5xl">✅</div>
             <h3 className="font-display font-bold text-xl text-slate-900">Order Sent on WhatsApp!</h3>
             <p className="text-slate-500 text-sm">
-              Your item list has been sent to Bujji Akka on WhatsApp. Head to the counter — your order will be ready for pickup!
+              Your item list has been sent to Satya General Store on WhatsApp. Head to the counter — your order will be ready for pickup!
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 text-xs font-semibold flex items-center gap-2">
               <span>📍</span> Collect your items at the counter
@@ -897,8 +897,8 @@ export default function StorePage() {
       <footer className="bg-slate-900 text-slate-400 py-10 mt-auto border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:flex sm:justify-between sm:items-center">
           <div className="mb-4 sm:mb-0">
-            <h4 className="text-white font-bold font-display text-lg">Bujji akka kirana kottu</h4>
-            <p className="text-xs text-slate-500 mt-1">© {new Date().getFullYear()} Bujji Akka Kirana Kottu. All rights reserved.</p>
+            <h4 className="text-white font-bold font-display text-lg">Satya General Store</h4>
+            <p className="text-xs text-slate-500 mt-1">© {new Date().getFullYear()} Satya General Store. All rights reserved.</p>
           </div>
           <div className="flex justify-center gap-4 text-xs">
             <span className="text-slate-500">Browse · WhatsApp · Collect</span>
