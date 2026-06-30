@@ -73,7 +73,7 @@ export const getItems = async () => {
 
 // SAVE ITEM (Add or Update)
 export const saveItem = async (item) => {
-  if (isMock) {
+  const saveToLocal = () => {
     const items = getLocalData('satya_items', SEED_ITEMS);
     const existingIndex = items.findIndex(i => i.id === item.id);
     if (existingIndex > -1) {
@@ -83,53 +83,67 @@ export const saveItem = async (item) => {
     }
     setLocalData('satya_items', items);
     return item;
-  }
+  };
+
+  if (isMock) return saveToLocal();
+
   try {
+    const timeout = new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000));
     const docRef = doc(db, 'items', item.id);
-    await setDoc(docRef, item);
+    await Promise.race([setDoc(docRef, item), timeout]);
+    // Also update localStorage as a local cache
+    saveToLocal();
     return item;
   } catch (error) {
-    console.error("Error saving item to Firestore:", error);
-    throw error;
+    console.warn("Firestore save failed/timed out. Falling back to localStorage:", error.message);
+    return saveToLocal();
   }
 };
 
 // DELETE ITEM
 export const deleteItem = async (itemId) => {
-  if (isMock) {
+  const deleteFromLocal = () => {
     const items = getLocalData('satya_items', SEED_ITEMS);
     const updated = items.filter(i => i.id !== itemId);
     setLocalData('satya_items', updated);
-    return;
-  }
+  };
+
+  if (isMock) { deleteFromLocal(); return; }
+
   try {
-    await deleteDoc(doc(db, 'items', itemId));
+    const timeout = new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000));
+    await Promise.race([deleteDoc(doc(db, 'items', itemId)), timeout]);
+    deleteFromLocal();
   } catch (error) {
-    console.error("Error deleting item from Firestore:", error);
-    throw error;
+    console.warn("Firestore delete failed/timed out. Falling back to localStorage:", error.message);
+    deleteFromLocal();
   }
 };
 
 // RESET INVENTORY TO DEFAULT
 export const resetInventoryToDefault = async () => {
-  if (isMock) {
+  const resetLocal = () => {
     setLocalData('satya_items', SEED_ITEMS);
     return SEED_ITEMS;
-  }
+  };
+
+  if (isMock) return resetLocal();
+
   try {
+    const timeout = (ms) => new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms));
     // Delete existing
-    const querySnapshot = await getDocs(collection(db, 'items'));
+    const querySnapshot = await Promise.race([getDocs(collection(db, 'items')), timeout(4000)]);
     for (const d of querySnapshot.docs) {
-      await deleteDoc(doc(db, 'items', d.id));
+      await Promise.race([deleteDoc(doc(db, 'items', d.id)), timeout(4000)]);
     }
     // Seed
     for (const item of SEED_ITEMS) {
-      await setDoc(doc(db, 'items', item.id), item);
+      await Promise.race([setDoc(doc(db, 'items', item.id), item), timeout(4000)]);
     }
-    return SEED_ITEMS;
+    return resetLocal();
   } catch (error) {
-    console.error("Error resetting inventory in Firestore:", error);
-    throw error;
+    console.warn("Firestore reset failed/timed out. Falling back to localStorage:", error.message);
+    return resetLocal();
   }
 };
 
