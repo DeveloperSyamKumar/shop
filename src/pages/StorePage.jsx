@@ -506,22 +506,22 @@ export default function StorePage() {
                     className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden group"
                   >
                     {/* Product Image */}
-                    <div className={`relative h-44 overflow-hidden bg-gradient-to-br ${gradient} shrink-0`}>
+                    <div className={`relative h-44 overflow-hidden bg-white shrink-0`}>
                       {item.imageUrl ? (
                         <img
                           src={item.imageUrl}
                           alt={item.name}
                           loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform duration-500 mix-blend-multiply"
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white/40 text-5xl font-black">
+                        <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white/40 text-5xl font-black`}>
                           {item.name.charAt(0)}
                         </div>
                       )}
                       {/* Bottom image fade */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
                       {/* Category badge */}
                       <span className={`absolute top-3 left-3 px-2.5 py-1 text-[11px] font-bold rounded-lg ${bgCol} ${textCol} ${borderCol} border shadow-sm backdrop-blur-sm`}>
                         {item.category}
@@ -642,7 +642,7 @@ export default function StorePage() {
                           <img
                             src={item.product.imageUrl}
                             alt={item.product.name}
-                            className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
+                            className="w-14 h-14 rounded-xl object-contain shrink-0 border border-slate-100 bg-white mix-blend-multiply p-1"
                             onError={(e) => { e.target.style.display='none'; }}
                           />
                         ) : (

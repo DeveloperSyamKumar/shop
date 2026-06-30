@@ -523,7 +523,7 @@ export default function AdminPage({ onLogout }) {
                                 <img
                                   src={product.imageUrl}
                                   alt={product.name}
-                                  className="w-12 h-12 rounded-xl object-cover border border-slate-700"
+                                  className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 mix-blend-multiply p-1"
                                   onError={(e) => { e.target.style.display='none'; }}
                                 />
                               ) : (
