@@ -696,11 +696,11 @@ export default function AdminPage({ onLogout }) {
                 <div className="col-span-3">
                   <label className="block text-slate-300 text-xs font-semibold mb-1">Image URL</label>
                   <input
-                    type="url"
+                    type="text"
                     className="w-full bg-slate-900 border border-slate-700 text-white px-3.5 py-2.5 rounded-xl outline-none text-sm focus:border-amber-500"
-                    placeholder="https://images.unsplash.com/photo-...?w=400&q=80"
+                    placeholder="https://..."
                     value={prodImageUrl}
-                    onChange={(e) => setProdImageUrl(e.target.value)}
+                    onChange={(e) => setProdImageUrl(e.target.value.trim())}
                   />
                   {prodImageUrl && (
                     <img
