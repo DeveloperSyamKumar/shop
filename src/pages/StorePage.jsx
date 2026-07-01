@@ -386,39 +386,14 @@ export default function StorePage() {
       </section>
 
       {/* Main Content */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-8">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-2 sm:px-6 lg:px-8 py-6 flex flex-row gap-2 md:gap-8">
         
-        {/* Mobile: Horizontal Category Pill Bar */}
-        <div className="md:hidden -mx-4 px-4 overflow-x-auto pb-2">
-          <div className="flex gap-2 w-max">
-            {CATEGORIES.map(category => {
-              const count = category === 'All Items' ? items.length : items.filter(i => i.category === category).length;
-              const isActive = selectedCategory === category;
-              return (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 border ${
-                    isActive
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300 hover:text-amber-700'
-                  }`}
-                >
-                  {category}
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Desktop: Sidebar Categories */}
-        <aside className="hidden md:block w-64 shrink-0">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-28">
-            <h3 className="font-bold text-slate-950 mb-3 px-1 font-display">Categories</h3>
-            <nav className="space-y-1">
+        {/* Sidebar Categories — narrow on mobile, full on desktop */}
+        <aside className="w-16 md:w-56 shrink-0">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm sticky top-28 overflow-hidden min-h-[calc(100vh-7rem)]">
+            {/* Desktop header */}
+            <h3 className="hidden md:block font-bold text-slate-950 mb-0 px-4 pt-4 pb-2 font-display text-sm">Categories</h3>
+            <nav className="flex flex-col">
               {CATEGORIES.map(category => {
                 const count = category === 'All Items' ? items.length : items.filter(i => i.category === category).length;
                 const isActive = selectedCategory === category;
@@ -426,14 +401,21 @@ export default function StorePage() {
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center justify-between ${
+                    className={`w-full text-center md:text-left transition-all duration-200 flex flex-col md:flex-row items-center md:justify-between gap-0.5 md:gap-0 border-b border-slate-100 last:border-0 ${
                       isActive
-                        ? 'bg-amber-500 text-white font-semibold shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                        ? 'bg-amber-500 text-white font-semibold'
+                        : 'text-slate-600 hover:bg-amber-50 hover:text-amber-700'
                     }`}
                   >
-                    <span>{category}</span>
-                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                    {/* Mobile: compact stacked label */}
+                    <span className="md:hidden w-full px-1 py-2.5 text-[10px] font-bold leading-tight text-center block">
+                      {category === 'All Items' ? 'All' : category.split(' ').map((word, i) => (
+                        <span key={i} className="block">{word}</span>
+                      ))}
+                    </span>
+                    {/* Desktop: full label + count */}
+                    <span className="hidden md:block flex-1 px-3.5 py-2.5 text-sm">{category}</span>
+                    <span className={`hidden md:inline-block text-[11px] font-bold px-1.5 py-0.5 rounded-full mr-3 ${
                       isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-500'
                     }`}>{count}</span>
                   </button>
@@ -444,7 +426,7 @@ export default function StorePage() {
         </aside>
 
         {/* Catalog Section */}
-        <div className="flex-grow space-y-5">
+        <div className="flex-grow min-w-0 space-y-5">
           {/* Search Box */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
