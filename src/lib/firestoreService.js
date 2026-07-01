@@ -39,16 +39,30 @@ export const deleteItem = async (itemId) => {
 };
 
 export const resetInventoryToDefault = async () => {
-  // Delete all existing items
+  // Read existing items to preserve custom imageUrls
   const snapshot = await getDocs(collection(db, 'items'));
+  const existingImageMap = {};
+  snapshot.docs.forEach(d => {
+    const data = d.data();
+    if (data.imageUrl) existingImageMap[d.id] = data.imageUrl;
+  });
+
+  // Delete all existing items
   for (const d of snapshot.docs) {
     await deleteDoc(doc(db, 'items', d.id));
   }
-  // Seed defaults
+
+  // Re-seed defaults but keep any custom imageUrl that was previously set
+  const seededItems = [];
   for (const item of SEED_ITEMS) {
-    await setDoc(doc(db, 'items', item.id), item);
+    const mergedItem = {
+      ...item,
+      imageUrl: existingImageMap[item.id] || item.imageUrl
+    };
+    await setDoc(doc(db, 'items', item.id), mergedItem);
+    seededItems.push(mergedItem);
   }
-  return SEED_ITEMS;
+  return seededItems;
 };
 
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
