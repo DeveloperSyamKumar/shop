@@ -231,8 +231,47 @@ export default function AdminPage({ onLogout }) {
     });
   };
 
+  const playClickSound = (type = 'success') => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      if (type === 'success') {
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.08); // E5
+        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.35);
+      } else if (type === 'cancel') {
+        osc.frequency.setValueAtTime(329.63, audioCtx.currentTime); // E4
+        osc.frequency.setValueAtTime(220.00, audioCtx.currentTime + 0.1); // A3
+        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.4);
+      } else {
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.1);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleStatusChange = async (orderId, newStatus) => {
     try {
+      if (newStatus === 'Cancelled') {
+        playClickSound('cancel');
+      } else {
+        playClickSound('success');
+      }
       await updateOrderStatus(orderId, newStatus);
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     } catch (err) {
@@ -394,7 +433,7 @@ export default function AdminPage({ onLogout }) {
               </div>
             </div>
             <button
-              onClick={() => setIsMuted(!isMuted)}
+              onClick={() => { playClickSound('click'); setIsMuted(!isMuted); }}
               className={`px-4 py-2 font-bold text-xs rounded-xl transition-colors shrink-0 shadow-sm ${
                 isMuted 
                   ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10' 
@@ -452,7 +491,7 @@ export default function AdminPage({ onLogout }) {
         {/* Tab Selection */}
         <section className="flex border-b border-slate-700/60">
           <button
-            onClick={() => setActiveTab('orders')}
+            onClick={() => { playClickSound('click'); setActiveTab('orders'); }}
             className={`px-6 py-3.5 text-sm font-semibold tracking-wide border-b-2 transition-all duration-200 flex items-center gap-2 ${
               activeTab === 'orders' 
                 ? 'border-amber-500 text-amber-500 font-bold bg-slate-800/30' 
@@ -464,7 +503,7 @@ export default function AdminPage({ onLogout }) {
           </button>
           
           <button
-            onClick={() => setActiveTab('inventory')}
+            onClick={() => { playClickSound('click'); setActiveTab('inventory'); }}
             className={`px-6 py-3.5 text-sm font-semibold tracking-wide border-b-2 transition-all duration-200 flex items-center gap-2 ${
               activeTab === 'inventory' 
                 ? 'border-amber-500 text-amber-500 font-bold bg-slate-800/30' 
@@ -476,7 +515,7 @@ export default function AdminPage({ onLogout }) {
           </button>
 
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => { playClickSound('click'); setActiveTab('settings'); }}
             className={`px-6 py-3.5 text-sm font-semibold tracking-wide border-b-2 transition-all duration-200 flex items-center gap-2 ${
               activeTab === 'settings' 
                 ? 'border-amber-500 text-amber-500 font-bold bg-slate-800/30' 
@@ -642,7 +681,7 @@ export default function AdminPage({ onLogout }) {
                                 </button>
                               )}
                               <button
-                                onClick={() => setSelectedInvoiceOrder(order)}
+                                onClick={() => { playClickSound('click'); setSelectedInvoiceOrder(order); }}
                                 className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
                               >
                                 <Receipt className="w-3.5 h-3.5 text-slate-300" />
