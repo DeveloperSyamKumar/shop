@@ -58,6 +58,7 @@ export default function AdminPage({ onLogout }) {
   // Audio mute and notification states
   const [isMuted, setIsMuted] = useState(false);
   const [alertActive, setAlertActive] = useState(false);
+  const [activeOrderPopup, setActiveOrderPopup] = useState(null);
 
   // Modal State for Products
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -203,6 +204,7 @@ export default function AdminPage({ onLogout }) {
             } else {
               setIsMuted(true); // Keep loop alarm silent since they are already looking at it live
             }
+            setActiveOrderPopup(newOrders[0]); // Show visual pop-up alert on screen!
             newOrders.forEach(ord => {
               triggerSystemNotification(ord);
             });
@@ -491,7 +493,7 @@ export default function AdminPage({ onLogout }) {
               </div>
             </div>
             <button
-              onClick={() => { playClickSound('click'); setIsMuted(!isMuted); }}
+              onClick={(e) => { e.stopPropagation(); playClickSound('click'); setIsMuted(!isMuted); }}
               className={`px-4 py-2 font-bold text-xs rounded-xl transition-colors shrink-0 shadow-sm ${
                 isMuted 
                   ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10' 
@@ -631,6 +633,7 @@ export default function AdminPage({ onLogout }) {
                     {orders.map(order => (
                       <article 
                         key={order.id}
+                        id={order.id}
                         className="bg-slate-800 border border-slate-700/50 p-6 rounded-2xl flex flex-col lg:flex-row lg:items-start justify-between gap-6 shadow-sm hover:border-slate-600/50 transition-all duration-200"
                       >
                         {/* Order info */}
@@ -1229,6 +1232,76 @@ export default function AdminPage({ onLogout }) {
               >
                 <Printer className="w-4 h-4 text-white" />
                 <span className="text-white">Print Invoice</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Mobile/On-Screen Live Order Notification Popup */}
+      {activeOrderPopup && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm">
+          <div onClick={() => setActiveOrderPopup(null)} className="absolute inset-0" />
+          <div className="relative w-full max-w-md bg-slate-800 border border-slate-700/60 rounded-3xl p-6 shadow-2xl space-y-5 animate-slide-up">
+            
+            {/* Header */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center text-xl shrink-0 animate-bounce">
+                🔔
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-widest block">Live Alert</span>
+                <h3 className="font-display font-extrabold text-lg text-white">New Order Received! 📥</h3>
+              </div>
+            </div>
+
+            {/* Content Details */}
+            <div className="bg-slate-900/60 border border-slate-700 p-4 rounded-2xl space-y-3 text-sm text-slate-200">
+              <div className="flex justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400 font-semibold">Order ID</span>
+                <span className="font-bold text-white font-mono">{activeOrderPopup.id}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400 font-semibold">Customer</span>
+                <span className="font-bold text-white">{activeOrderPopup.customer.name}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-800 pb-2">
+                <span className="text-slate-400 font-semibold">Delivery</span>
+                <span className="font-bold text-amber-500">{activeOrderPopup.deliveryMethod}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">Total Amount</span>
+                <span className="font-black text-white text-base">₹{activeOrderPopup.total}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playClickSound('click');
+                  setIsMuted(true);
+                  setActiveOrderPopup(null);
+                }}
+                className="py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition-all duration-150 text-center"
+              >
+                Silence & Dismiss
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playClickSound('click');
+                  setIsMuted(true);
+                  setActiveOrderPopup(null);
+                  setActiveTab('orders');
+                  setTimeout(() => {
+                    const el = document.getElementById(activeOrderPopup.id);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
+                className="py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all duration-150 text-center shadow-md shadow-amber-500/20"
+              >
+                View Order Details
               </button>
             </div>
           </div>
