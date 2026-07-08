@@ -87,20 +87,31 @@ export default function AdminPage({ onLogout }) {
       }
     }
 
-    // Auto-resume AudioContext on first user interaction to bypass browser autoplay blocks
-    const resumeAudio = () => {
+    // Auto-resume AudioContext on first user interaction, and auto-silence active loop
+    const resumeAndSilence = () => {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') {
           audioCtx.resume();
         }
       } catch (e) {}
+      setIsMuted(true); // Silence alarm loop on active user interaction
     };
-    window.addEventListener('click', resumeAudio);
-    window.addEventListener('touchstart', resumeAudio);
+    window.addEventListener('click', resumeAndSilence);
+    window.addEventListener('touchstart', resumeAndSilence);
+
+    // Auto-silence loop alarm as soon as the tab becomes visible/active
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setIsMuted(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
-      window.removeEventListener('click', resumeAudio);
-      window.removeEventListener('touchstart', resumeAudio);
+      window.removeEventListener('click', resumeAndSilence);
+      window.removeEventListener('touchstart', resumeAndSilence);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -186,7 +197,12 @@ export default function AdminPage({ onLogout }) {
           const newOrders = allOrders.filter(o => !prevIds.has(o.id) && o.status === 'Order Received');
           
           if (newOrders.length > 0) {
-            setIsMuted(false); // Make sure alarm is active on new order arrival
+            // Only unmute looping alarm if the admin is NOT currently viewing the tab (tab hidden)
+            if (document.hidden) {
+              setIsMuted(false);
+            } else {
+              setIsMuted(true); // Keep loop alarm silent since they are already looking at it live
+            }
             newOrders.forEach(ord => {
               triggerSystemNotification(ord);
             });
