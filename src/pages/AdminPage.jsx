@@ -1256,25 +1256,25 @@ export default function AdminPage({ onLogout }) {
               </div>
             </div>
 
-            {/* Content Details */}
-            <div className="bg-slate-900/60 border border-slate-700 p-4 rounded-2xl space-y-3 text-sm text-slate-200">
-              <div className="flex justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400 font-semibold">Order ID</span>
-                <span className="font-bold text-white font-mono">{activeOrderPopup.id}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400 font-semibold">Customer</span>
-                <span className="font-bold text-white">{activeOrderPopup.customer.name}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400 font-semibold">Delivery</span>
-                <span className="font-bold text-amber-500">{activeOrderPopup.deliveryMethod}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Total Amount</span>
-                <span className="font-black text-white text-base">₹{activeOrderPopup.total}</span>
-              </div>
-            </div>
+            {/* Enlarge Items text size - yellow text card with big letters */}
+             <div className="bg-amber-400 text-slate-950 p-5 rounded-2xl border-2 border-amber-500 shadow-md space-y-2">
+               <span className="text-[10px] text-amber-900 font-extrabold uppercase tracking-wider block">Items Ordered:</span>
+               <ul className="space-y-3">
+                 {activeOrderPopup.items.map((it, idx) => (
+                   <li key={idx} className="text-xl sm:text-2xl font-black tracking-tight leading-tight flex justify-between gap-4 border-b border-amber-500/20 pb-2 last:border-0 last:pb-0">
+                     <span>{it.productName} <span className="text-xs font-bold opacity-75">({it.volume})</span></span>
+                     <span className="bg-slate-950 text-amber-400 px-2 py-0.5 rounded-lg text-sm shrink-0">x{it.quantity}</span>
+                   </li>
+                 ))}
+               </ul>
+             </div>
+
+             {/* Small customer & meta details underneath */}
+             <div className="flex justify-between items-center text-[10px] text-slate-400 bg-slate-900/40 border border-slate-750 px-3 py-2 rounded-xl">
+               <span>Customer: <strong className="text-slate-200">{activeOrderPopup.customer.name}</strong></span>
+               <span>Total: <strong className="text-slate-200">₹{activeOrderPopup.total}</strong></span>
+               <span>Method: <strong className="text-amber-500">{activeOrderPopup.deliveryMethod}</strong></span>
+             </div>
 
             {/* Actions */}
             <div className="grid grid-cols-2 gap-3">
