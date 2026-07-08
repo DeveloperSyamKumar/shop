@@ -86,9 +86,51 @@ export default function AdminPage({ onLogout }) {
         Notification.requestPermission();
       }
     }
+
+    // Auto-resume AudioContext on first user interaction to bypass browser autoplay blocks
+    const resumeAudio = () => {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('click', resumeAudio);
+    window.addEventListener('touchstart', resumeAudio);
+    return () => {
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('touchstart', resumeAudio);
+    };
   }, []);
 
+  const playNotifyDing = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08); // A5
+      osc.frequency.setValueAtTime(1174.66, audioCtx.currentTime + 0.16); // D6
+      
+      gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+      
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.6);
+    } catch (e) {
+      console.error("Notify ding playback failed:", e);
+    }
+  };
+
   const triggerSystemNotification = (order) => {
+    // Play the physical chime sound directly from the tab
+    playNotifyDing();
+
     const title = "New Order Received! 📥";
     const options = {
       body: `Order ID: ${order.id} for ₹${order.total} from ${order.customer.name}`,
