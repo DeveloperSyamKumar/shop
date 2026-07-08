@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { db } from '../lib/firebase';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { 
   getItems, 
   saveItem, 
@@ -53,6 +55,10 @@ export default function AdminPage({ onLogout }) {
   // Invoice View Modal state
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
 
+  // Audio mute and notification states
+  const [isMuted, setIsMuted] = useState(false);
+  const [alertActive, setAlertActive] = useState(false);
+
   // Modal State for Products
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null); // null if adding
@@ -74,23 +80,142 @@ export default function AdminPage({ onLogout }) {
   });
 
   useEffect(() => {
-    loadAllData();
+    // Request desktop notification permission
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
   }, []);
 
-  const loadAllData = async () => {
+  const triggerSystemNotification = (order) => {
+    const title = "New Order Received! 📥";
+    const options = {
+      body: `Order ID: ${order.id} for ₹${order.total} from ${order.customer.name}`,
+      tag: order.id,
+      requireInteraction: true,
+      silent: false,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico'
+    };
+
+    // Attempt to send message to Service Worker so it shows notification even if closed/background
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'SHOW_NOTIFICATION',
+        title,
+        options
+      });
+    } else {
+      // Fallback to standard client browser Notification
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, options);
+      }
+    }
+  };
+
+  useEffect(() => {
     setLoading(true);
     setError(null);
-    try {
-      const [allItems, allOrders] = await Promise.all([getItems(), getOrders()]);
-      setItems(allItems);
-      setOrders(allOrders);
-      calculateStats(allItems, allOrders);
-    } catch (err) {
-      console.error('Failed to load data from Firestore:', err);
-      setError('Unable to connect to Firebase. Please check your internet connection.');
-    } finally {
+
+    // Initial products load
+    const loadProducts = async () => {
+      try {
+        const allItems = await getItems();
+        setItems(allItems);
+      } catch (err) {
+        console.error("Failed to load inventory:", err);
+      }
+    };
+    loadProducts();
+
+    // Real-time listener for orders
+    const ordersQuery = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
+      const allOrders = [];
+      snapshot.forEach((doc) => {
+        allOrders.push({ id: doc.id, ...doc.data() });
+      });
+
+      setOrders((prevOrders) => {
+        // If it's a real-time update (not the first fetch), find any brand new order
+        if (prevOrders.length > 0) {
+          const prevIds = new Set(prevOrders.map(o => o.id));
+          const newOrders = allOrders.filter(o => !prevIds.has(o.id) && o.status === 'Order Received');
+          
+          if (newOrders.length > 0) {
+            setIsMuted(false); // Make sure alarm is active on new order arrival
+            newOrders.forEach(ord => {
+              triggerSystemNotification(ord);
+            });
+          }
+        }
+        return allOrders;
+      });
+
+      // Recalculate metrics based on new orders list
+      setItems((currentItems) => {
+        calculateStats(currentItems, allOrders);
+        return currentItems;
+      });
       setLoading(false);
+    }, (err) => {
+      console.error("Orders real-time stream failed:", err);
+      setError("Unable to connect to live database. Please check your internet.");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Web Audio Context Bell Ringing sound loop
+  useEffect(() => {
+    const hasActiveAlert = orders.some(o => o.status === 'Order Received');
+    setAlertActive(hasActiveAlert);
+
+    if (hasActiveAlert && !isMuted) {
+      const playAlarm = () => {
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          
+          // Generate a loud metallic bell chime using simple synthesis
+          const osc1 = audioCtx.createOscillator();
+          const gain1 = audioCtx.createGain();
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(987.77, audioCtx.currentTime); // B5 note
+          gain1.gain.setValueAtTime(0.4, audioCtx.currentTime);
+          gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.0);
+          osc1.connect(gain1);
+          gain1.connect(audioCtx.destination);
+          osc1.start(audioCtx.currentTime);
+          osc1.stop(audioCtx.currentTime + 1.0);
+
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(1318.51, audioCtx.currentTime + 0.1); // E6 note
+          gain2.gain.setValueAtTime(0.3, audioCtx.currentTime + 0.1);
+          gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.start(audioCtx.currentTime + 0.1);
+          osc2.stop(audioCtx.currentTime + 1.2);
+        } catch (err) {
+          console.error("Audio playback error:", err);
+        }
+      };
+
+      playAlarm();
+      const interval = setInterval(playAlarm, 2500); // sound repeats every 2.5 seconds
+      return () => clearInterval(interval);
     }
+  }, [orders, isMuted]);
+
+  const loadAllData = async () => {
+    try {
+      const allItems = await getItems();
+      setItems(allItems);
+    } catch (err) {}
   };
 
   const calculateStats = (productsList, ordersList) => {
@@ -109,9 +234,7 @@ export default function AdminPage({ onLogout }) {
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       await updateOrderStatus(orderId, newStatus);
-      const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
-      setOrders(updatedOrders);
-      calculateStats(items, updatedOrders);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     } catch (err) {
       alert("Failed to update status");
     }
@@ -125,7 +248,6 @@ export default function AdminPage({ onLogout }) {
     try {
       const resetItems = await resetInventoryToDefault();
       setItems(resetItems);
-      calculateStats(resetItems, orders);
       alert("Inventory successfully reset to standard items!");
     } catch (err) {
       alert("Failed to reset inventory");
@@ -259,6 +381,31 @@ export default function AdminPage({ onLogout }) {
       {/* Main Admin Area */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
+        {/* Active Alarm Chime Banner */}
+        {alertActive && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg animate-bounce">
+                🔔
+              </span>
+              <div>
+                <h3 className="font-bold text-sm text-white">New Orders Received!</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Ringing alarm is currently playing to alert you of incoming store orders.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className={`px-4 py-2 font-bold text-xs rounded-xl transition-colors shrink-0 shadow-sm ${
+                isMuted 
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10' 
+                  : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/10'
+              }`}
+            >
+              {isMuted ? '🔔 Resume Sound' : '🔕 Silence Alarm'}
+            </button>
+          </div>
+        )}
+
         {/* Statistics Widgets */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-slate-800 border border-slate-700/60 p-6 rounded-2xl flex items-center gap-5">
