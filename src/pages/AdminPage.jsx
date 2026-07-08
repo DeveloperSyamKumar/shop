@@ -170,6 +170,30 @@ export default function AdminPage({ onLogout }) {
     }
   };
 
+  const triggerDesktopPopup = (order) => {
+    try {
+      const itemsStr = encodeURIComponent(order.items.map(it => `${it.productName} (${it.volume}) x${it.quantity}`).join('\n'));
+      const name = encodeURIComponent(order.customer.name);
+      const url = `/admin/popup?id=${order.id}&name=${name}&total=${order.total}&items=${itemsStr}`;
+      
+      const width = 420;
+      const height = 360;
+      const left = (window.screen.width - width) / 2;
+      const top = (window.screen.height - height) / 2;
+      
+      const popupWindow = window.open(
+        url,
+        `OrderAlert_${order.id}`,
+        `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no,location=no,resizable=no`
+      );
+      if (popupWindow) {
+        popupWindow.focus();
+      }
+    } catch (e) {
+      console.error("Failed to open desktop popup window", e);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -209,6 +233,7 @@ export default function AdminPage({ onLogout }) {
             setActiveOrderPopup(newOrders[0]); // Show visual pop-up alert on screen!
             newOrders.forEach(ord => {
               triggerSystemNotification(ord);
+              triggerDesktopPopup(ord); // Launch desktop floating pop-up window!
             });
           }
         }

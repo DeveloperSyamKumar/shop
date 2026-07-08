@@ -3,6 +3,7 @@ import { useState } from 'react'
 import StorePage from './pages/StorePage'
 import AdminLogin from './pages/AdminLogin'
 import AdminPage from './pages/AdminPage'
+import AdminPopupAlert from './pages/AdminPopupAlert'
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => {
@@ -34,6 +35,7 @@ export default function App() {
           isAdmin ? <AdminPage onLogout={handleLogout} /> : <Navigate to="/admin/login" replace />
         } 
       />
+      <Route path="/admin/popup" element={<AdminPopupAlert />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
