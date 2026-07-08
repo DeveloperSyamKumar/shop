@@ -149,6 +149,8 @@ export default function AdminPage({ onLogout }) {
       tag: order.id,
       requireInteraction: true,
       silent: false,
+      vibrate: [200, 100, 200, 100, 200],
+      renotify: true,
       icon: '/favicon.ico',
       badge: '/favicon.ico'
     };
