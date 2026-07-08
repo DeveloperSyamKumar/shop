@@ -39,7 +39,8 @@ import {
   Printer,
   Sparkles,
   Calendar,
-  Truck
+  Truck,
+  History
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
