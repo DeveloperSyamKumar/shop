@@ -3,11 +3,13 @@ import { SEED_ITEMS } from './seedData';
 import {
   collection,
   getDocs,
+  getDoc,
   doc,
   setDoc,
   deleteDoc,
   query,
   orderBy,
+  where,
 } from 'firebase/firestore';
 
 // ─── ITEMS ───────────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ export const createOrder = async (order) => {
     ...order,
     id: order.id || `ORD-${Date.now()}`,
     createdAt: order.createdAt || new Date().toISOString(),
-    status: order.status || 'Pending',
+    status: order.status || 'Order Received',
   };
   await setDoc(doc(db, 'orders', newOrder.id), newOrder);
   return newOrder;
@@ -86,4 +88,29 @@ export const createOrder = async (order) => {
 
 export const updateOrderStatus = async (orderId, status) => {
   await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
+};
+
+// ─── USER PROFILE & HISTORY ──────────────────────────────────────────────────
+
+export const getUserOrders = async (userId) => {
+  if (!userId) return [];
+  const q = query(collection(db, 'orders'), where('userId', '==', userId));
+  const snapshot = await getDocs(q);
+  const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+};
+
+export const getUserProfile = async (userId) => {
+  if (!userId) return null;
+  const docRef = doc(db, 'users', userId);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    return docSnap.data();
+  }
+  return null;
+};
+
+export const saveUserProfile = async (userId, profileData) => {
+  if (!userId) return;
+  await setDoc(doc(db, 'users', userId), profileData, { merge: true });
 };

@@ -24,7 +24,9 @@ import {
   Search,
   X,
   Save,
-  MessageSquare
+  MessageSquare,
+  Receipt,
+  Printer
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -48,10 +50,8 @@ export default function AdminPage({ onLogout }) {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Shop WhatsApp Number setting (kept in localStorage as it's a UI pref, not product data)
-  const [shopWhatsApp, setShopWhatsApp] = useState(() => {
-    return localStorage.getItem('satya_shop_whatsapp') || '919603655683';
-  });
+  // Invoice View Modal state
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
 
   // Modal State for Products
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -94,8 +94,8 @@ export default function AdminPage({ onLogout }) {
   };
 
   const calculateStats = (productsList, ordersList) => {
-    const completed = ordersList.filter(o => o.status === 'Completed');
-    const pending = ordersList.filter(o => o.status === 'Pending').length;
+    const completed = ordersList.filter(o => o.status === 'Delivered');
+    const pending = ordersList.filter(o => o.status === 'Order Received' || o.status === 'Getting Ready').length;
     const totalSales = completed.reduce((sum, o) => sum + o.total, 0);
 
     setStats({
@@ -132,11 +132,6 @@ export default function AdminPage({ onLogout }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSaveWhatsAppNumber = () => {
-    localStorage.setItem('satya_shop_whatsapp', shopWhatsApp);
-    alert("WhatsApp recipient number updated successfully!");
   };
 
   // Product CRUD
@@ -410,10 +405,16 @@ export default function AdminPage({ onLogout }) {
                               <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Customer Details</p>
                               <p className="font-semibold text-white">{order.customer.name}</p>
                               <p className="text-slate-300">{order.customer.phone}</p>
+                              {order.customer.email && <p className="text-xs text-slate-400">{order.customer.email}</p>}
                             </div>
                             <div className="space-y-1">
-                              <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Delivery Address</p>
-                              <p className="text-slate-300 whitespace-pre-wrap">{order.customer.address}</p>
+                              <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Delivery & Method</p>
+                              <p className="text-slate-355 font-bold">{order.deliveryMethod || 'Take Away (Pickup)'}</p>
+                              {order.deliveryMethod === 'Cash on Delivery' && order.customer.address ? (
+                                <p className="text-slate-300 text-xs mt-1 whitespace-pre-wrap bg-slate-900/50 p-2 rounded-lg">{order.customer.address}</p>
+                              ) : (
+                                <p className="text-slate-500 text-xs mt-1 italic">Customer will pick up at store counter.</p>
+                              )}
                             </div>
                           </div>
 
@@ -437,27 +438,70 @@ export default function AdminPage({ onLogout }) {
                         </div>
 
                         {/* Order status and total */}
-                        <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-start gap-4 lg:w-48 shrink-0">
+                        <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-start gap-4 lg:w-52 shrink-0">
                           <div className="text-right">
                             <span className="text-xs text-slate-400 font-bold block uppercase tracking-wider">Order Value</span>
                             <span className="text-2xl font-extrabold text-white">₹{order.total}</span>
                             <span className="text-[10px] block font-semibold text-amber-500 mt-0.5">{order.paymentMethod}</span>
+                            {order.deliveryFee > 0 && (
+                              <span className="text-[9px] block text-slate-400 font-semibold italic mt-0.5">Includes ₹30 delivery fee</span>
+                            )}
                           </div>
 
-                          <div className="space-y-1.5 w-full">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block lg:text-right">Order Status</label>
-                            <select
-                              value={order.status}
-                              onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                              className={`w-full text-slate-950 font-bold px-3 py-2 rounded-xl outline-none text-sm shadow-sm ${
-                                order.status === 'Completed' ? 'bg-emerald-400' :
-                                order.status === 'Cancelled' ? 'bg-red-400' : 'bg-amber-400'
-                              }`}
-                            >
-                              <option value="Pending">🕒 Pending</option>
-                              <option value="Completed">✅ Completed</option>
-                              <option value="Cancelled">❌ Cancelled</option>
-                            </select>
+                          <div className="space-y-2.5 w-full">
+                            <div>
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block lg:text-right mb-1">Order Status</label>
+                              <select
+                                value={order.status}
+                                onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                                className={`w-full text-slate-950 font-bold px-3 py-2 rounded-xl outline-none text-xs shadow-sm ${
+                                  order.status === 'Delivered' ? 'bg-emerald-400' :
+                                  order.status === 'Cancelled' ? 'bg-red-400' :
+                                  order.status === 'Getting Ready' ? 'bg-blue-400' :
+                                  'bg-amber-400' // Order Received
+                                }`}
+                              >
+                                <option value="Order Received">📥 Order Received</option>
+                                <option value="Getting Ready">📦 Getting Ready</option>
+                                <option value="Delivered">✅ Delivered</option>
+                                <option value="Cancelled">❌ Cancelled</option>
+                              </select>
+                            </div>
+
+                            {/* Quick Action Buttons */}
+                            <div className="space-y-1.5">
+                              {order.status === 'Order Received' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'Getting Ready')}
+                                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm"
+                                >
+                                  Confirm Order
+                                </button>
+                              )}
+                              {order.status === 'Getting Ready' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'Delivered')}
+                                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm"
+                                >
+                                  Mark as Delivered
+                                </button>
+                              )}
+                              {(order.status === 'Order Received' || order.status === 'Getting Ready') && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'Cancelled')}
+                                  className="w-full py-1.5 border border-red-500/30 hover:bg-red-500/10 text-red-400 font-bold text-[10px] rounded-lg transition-colors"
+                                >
+                                  Cancel Order
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setSelectedInvoiceOrder(order)}
+                                className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
+                              >
+                                <Receipt className="w-3.5 h-3.5 text-slate-300" />
+                                <span>Invoice</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </article>
@@ -596,34 +640,7 @@ export default function AdminPage({ onLogout }) {
                   </p>
                 </div>
 
-                {/* WhatsApp Number settings */}
-                <div className="space-y-4 bg-slate-900/30 p-6 rounded-2xl border border-slate-800">
-                  <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-emerald-400" />
-                    <span>WhatsApp Order Settings</span>
-                  </h3>
-                  <div>
-                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Satya General Store WhatsApp Recipient Number</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="bg-slate-900 border border-slate-700 focus:border-amber-500 text-white px-3.5 py-2.5 rounded-xl outline-none text-sm flex-grow"
-                        placeholder="E.g., 919999999999"
-                        value={shopWhatsApp}
-                        onChange={(e) => setShopWhatsApp(e.target.value)}
-                      />
-                      <button
-                        onClick={handleSaveWhatsAppNumber}
-                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl transition-all duration-150"
-                      >
-                        Save
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-slate-500 mt-2 block">
-                      Include country code, no symbols. (For India, prefix with `91` followed by the 10-digit number. E.g. `919999999999`).
-                    </span>
-                  </div>
-                </div>
+
 
                 {/* Database seeding */}
                 <div className="space-y-4 bg-slate-900/30 p-6 rounded-2xl border border-slate-800">
@@ -827,6 +844,152 @@ export default function AdminPage({ onLogout }) {
           </div>
         );
       })()}
+
+      {/* Printable Invoice Modal for Admin */}
+      {selectedInvoiceOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm print:p-0 print:absolute print:inset-0 print:bg-white print:backdrop-blur-none">
+          <div onClick={() => setSelectedInvoiceOrder(null)} className="absolute inset-0 print:hidden" />
+          <div className="relative w-full max-w-2xl bg-white text-slate-800 rounded-3xl p-8 overflow-y-auto max-h-[90vh] print:max-h-full print:shadow-none print:border-0 print:rounded-none flex flex-col justify-between print-admin-invoice-container">
+            <button
+              onClick={() => setSelectedInvoiceOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-xl print:hidden"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Print CSS Injector */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                .print-admin-invoice-container, .print-admin-invoice-container * {
+                  visibility: visible !important;
+                }
+                .print-admin-invoice-container {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                }
+              }
+            `}} />
+
+            {/* Invoice Content */}
+            <div className="space-y-6 print:space-y-4">
+              
+              {/* Invoice Header */}
+              <div className="flex justify-between items-start border-b border-slate-200 pb-5">
+                <div>
+                  <h2 className="font-display font-extrabold text-2xl text-slate-900 tracking-tight">Satya General Store</h2>
+                  <p className="text-xs text-slate-500 mt-1">Visakhapatnam, Andhra Pradesh</p>
+                  <p className="text-xs text-slate-500">Phone: +91 96036 55683</p>
+                </div>
+                <div className="text-right">
+                  <h3 className="font-bold text-lg text-amber-500 uppercase tracking-widest">Invoice</h3>
+                  <p className="text-xs text-slate-500 mt-1">Order Ref: <span className="font-bold text-slate-800">{selectedInvoiceOrder.id}</span></p>
+                  <p className="text-xs text-slate-500">Date: {new Date(selectedInvoiceOrder.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {/* Billed To / Delivery Details */}
+              <div className="grid grid-cols-2 gap-6 text-xs bg-slate-50 p-4 rounded-2xl print:bg-slate-50/50 text-slate-800">
+                <div>
+                  <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Billed To</p>
+                  <p className="font-bold text-slate-900 text-sm mt-1">{selectedInvoiceOrder.customer.name}</p>
+                  <p className="text-slate-600 mt-0.5">{selectedInvoiceOrder.customer.phone}</p>
+                  {selectedInvoiceOrder.customer.email && (
+                    <p className="text-slate-600">{selectedInvoiceOrder.customer.email}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Order Details</p>
+                  <p className="font-semibold text-slate-800 mt-1">Method: {selectedInvoiceOrder.deliveryMethod || 'Take Away'}</p>
+                  <p className="text-slate-600">Payment: {selectedInvoiceOrder.paymentMethod}</p>
+                  {selectedInvoiceOrder.deliveryMethod === 'Cash on Delivery' && (
+                    <div className="mt-2 pt-1.5 border-t border-slate-200">
+                      <p className="font-semibold text-slate-400 text-[10px] uppercase">Delivery Address</p>
+                      <p className="text-slate-700 leading-tight mt-0.5">{selectedInvoiceOrder.customer.address}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Table of Items */}
+              <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-3.5">Product Details</th>
+                      <th className="p-3.5 text-center">Qty</th>
+                      <th className="p-3.5 text-right">Price</th>
+                      <th className="p-3.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedInvoiceOrder.items.map((it, idx) => (
+                      <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                        <td className="p-3.5">
+                          <p className="font-bold text-slate-800">{it.productName}</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">{it.volume}</p>
+                        </td>
+                        <td className="p-3.5 text-center font-bold text-slate-700">{it.quantity}</td>
+                        <td className="p-3.5 text-right text-slate-600">₹{it.price}</td>
+                        <td className="p-3.5 text-right font-bold text-slate-800">₹{it.price * it.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total calculations */}
+              <div className="flex justify-end pt-2 text-slate-800">
+                <div className="w-72 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Items Subtotal:</span>
+                    <span className="font-semibold">₹{selectedInvoiceOrder.total - (selectedInvoiceOrder.deliveryFee || 0)}</span>
+                  </div>
+                  {selectedInvoiceOrder.deliveryFee > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Delivery Fee (COD):</span>
+                      <span className="font-semibold text-orange-600">+₹{selectedInvoiceOrder.deliveryFee}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-extrabold text-slate-900">
+                    <span>Grand Total:</span>
+                    <span>₹{selectedInvoiceOrder.total}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-8 border-t border-slate-100 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                Thank you for shopping at Satya General Store! 🙏
+              </div>
+            </div>
+
+            {/* Actions (hidden when printing) */}
+            <div className="flex gap-3 pt-6 border-t border-slate-100 mt-6 print:hidden">
+              <button
+                onClick={() => setSelectedInvoiceOrder(null)}
+                className="flex-grow py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors text-center"
+              >
+                Close Invoice
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex-grow py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-amber-500/10"
+              >
+                <Printer className="w-4 h-4 text-white" />
+                <span className="text-white">Print Invoice</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

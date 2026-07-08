@@ -1,5 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { getItems, createOrder } from '../lib/firestoreService';
+import { db, auth } from '../lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  sendPasswordResetEmail,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import {
+  getItems,
+  createOrder,
+  getUserOrders,
+  getUserProfile,
+  saveUserProfile
+} from '../lib/firestoreService';
 import { 
   ShoppingBag, 
   Search, 
@@ -16,7 +31,15 @@ import {
   FileText,
   ChevronRight,
   ChevronUp,
-  Clock
+  Clock,
+  Mail,
+  Lock,
+  LogOut,
+  Receipt,
+  Printer,
+  Sparkles,
+  Calendar,
+  Truck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -68,16 +91,50 @@ export default function StorePage() {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isOrderSuccess, setIsOrderSuccess] = useState(false);
   
   // Product variant selections (productId -> variantIndex)
   const [selectedVariants, setSelectedVariants] = useState({});
 
+  // User Auth State
+  const [user, setUser] = useState(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
+  const [authAddress, setAuthAddress] = useState('');
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+
+  // Dashboard & Profile
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState('orders'); // 'orders' or 'profile'
+  const [userOrders, setUserOrders] = useState([]);
+  const [profileName, setProfileName] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [profileAddress, setProfileAddress] = useState('');
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
   // Checkout form details
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState('Take Away'); // 'Take Away' or 'Cash on Delivery'
+  const [customerAddress, setCustomerAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash at Counter');
   const [notes, setNotes] = useState('');
+
+  // Live Tracking State
+  const [activeOrderId, setActiveOrderId] = useState(() => {
+    return localStorage.getItem('satya_active_order_id') || null;
+  });
+  const [activeOrder, setActiveOrder] = useState(null);
+  const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+
+  // Invoice State
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
 
   // Back-to-top visibility
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -86,6 +143,76 @@ export default function StorePage() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Listen to Auth State changes
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Load user profile details
+        try {
+          const profile = await getUserProfile(currentUser.uid);
+          if (profile) {
+            setCustomerName(profile.name || '');
+            setCustomerPhone(profile.phone || '');
+            setCustomerAddress(profile.address || '');
+            
+            setProfileName(profile.name || '');
+            setProfilePhone(profile.phone || '');
+            setProfileAddress(profile.address || '');
+          }
+        } catch (err) {
+          console.error("Error loading user profile:", err);
+        }
+      } else {
+        setProfileName('');
+        setProfilePhone('');
+        setProfileAddress('');
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Live listener for active order
+  useEffect(() => {
+    if (!activeOrderId) {
+      setActiveOrder(null);
+      return;
+    }
+
+    const unsub = onSnapshot(doc(db, 'orders', activeOrderId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setActiveOrder({ id: docSnap.id, ...data });
+      } else {
+        setActiveOrder(null);
+      }
+    }, (err) => {
+      console.error("Live order tracking error:", err);
+    });
+
+    return () => unsub();
+  }, [activeOrderId]);
+
+  // Load orders when dashboard opens
+  const loadUserOrders = async () => {
+    if (!user) return;
+    setLoadingOrders(true);
+    try {
+      const orders = await getUserOrders(user.uid);
+      setUserOrders(orders);
+    } catch (err) {
+      console.error("Error loading user orders:", err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDashboardOpen && user) {
+      loadUserOrders();
+    }
+  }, [isDashboardOpen, user]);
 
   // Fetch items from Firestore on mount
   useEffect(() => {
@@ -190,11 +317,105 @@ export default function StorePage() {
     }, 0);
   };
 
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+    
+    if (isForgotPassword) {
+      try {
+        await sendPasswordResetEmail(auth, authEmail);
+        setAuthSuccess('Password reset link sent to your email!');
+      } catch (err) {
+        setAuthError(err.message.replace('Firebase:', ''));
+      }
+      return;
+    }
+
+    if (isSignUpMode) {
+      if (!authEmail || !authPassword || !authName || !authPhone) {
+        setAuthError('Please fill in Name, Phone, Email, and Password.');
+        return;
+      }
+      try {
+        const credentials = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        const userUid = credentials.user.uid;
+        
+        await saveUserProfile(userUid, {
+          name: authName,
+          phone: authPhone,
+          address: authAddress,
+          email: authEmail
+        });
+        
+        setProfileName(authName);
+        setProfilePhone(authPhone);
+        setProfileAddress(authAddress);
+        setCustomerName(authName);
+        setCustomerPhone(authPhone);
+        setCustomerAddress(authAddress);
+
+        setIsAuthModalOpen(false);
+        setAuthEmail('');
+        setAuthPassword('');
+        setAuthName('');
+        setAuthPhone('');
+        setAuthAddress('');
+        setIsSignUpMode(false);
+      } catch (err) {
+        setAuthError(err.message.replace('Firebase:', ''));
+      }
+    } else {
+      try {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+        setIsAuthModalOpen(false);
+        setAuthEmail('');
+        setAuthPassword('');
+      } catch (err) {
+        setAuthError('Invalid email or password. Please try again.');
+      }
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerAddress('');
+      setIsDashboardOpen(false);
+    } catch (err) {
+      console.error("Sign out failed:", err);
+    }
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      await saveUserProfile(user.uid, {
+        name: profileName,
+        phone: profilePhone,
+        address: profileAddress
+      });
+      setCustomerName(profileName);
+      setCustomerPhone(profilePhone);
+      setCustomerAddress(profileAddress);
+      setIsProfileEditing(false);
+      alert("Profile updated successfully!");
+    } catch (err) {
+      alert("Failed to update profile.");
+    }
+  };
+
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     if (cart.length === 0) return;
 
-    const orderTotal = getCartTotal();
+    const itemsTotal = getCartTotal();
+    const deliveryFee = deliveryMethod === 'Cash on Delivery' ? 30 : 0;
+    const orderTotal = itemsTotal + deliveryFee;
+
     const orderItems = cart.map(item => ({
       productId: item.product.id,
       productName: item.product.name,
@@ -204,61 +425,41 @@ export default function StorePage() {
     }));
 
     const orderData = {
+      userId: user?.uid || null,
       customer: {
         name: customerName,
-        phone: customerPhone
+        phone: customerPhone,
+        email: user?.email || '',
+        address: deliveryMethod === 'Cash on Delivery' ? customerAddress : ''
       },
       items: orderItems,
+      deliveryMethod,
+      deliveryFee,
       total: orderTotal,
-      paymentMethod,
+      paymentMethod: deliveryMethod === 'Cash on Delivery' ? 'Cash on Delivery' : paymentMethod,
       notes,
       createdAt: new Date().toISOString(),
-      status: 'Pending'
+      status: 'Order Received'
     };
 
     try {
-      // Save order to Firestore / Local Storage
       const savedOrder = await createOrder(orderData);
-
-      // Construct WhatsApp Order Message
-      let message = `🛍️ *WALK-IN ORDER – Satya General Store*\n`;
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `*Order ID:* ${savedOrder.id}\n`;
-      message += `*Name:* ${customerName}\n`;
-      message += `*Phone:* ${customerPhone}\n`;
-      message += `*Payment:* ${paymentMethod}\n`;
-      if (notes) message += `*Notes:* ${notes}\n`;
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `*Items:*\n`;
       
-      cart.forEach((item, index) => {
-        const itemSubtotal = item.variant.price * item.quantity;
-        message += `${index + 1}. ${item.product.name} (${item.variant.volume}) × ${item.quantity} = *₹${itemSubtotal}*\n`;
-      });
-      
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `*TOTAL: ₹${orderTotal}*\n`;
-      message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      message += `I'm at your shop. Please pack my items, I'll collect at the counter. 🙏`;
-
-      const encodedText = encodeURIComponent(message);
-      // Satya General Store WhatsApp number (can configure in admin, default is a fallback number)
-      const shopWhatsApp = localStorage.getItem('satya_shop_whatsapp') || '919603655683';
-      const whatsappUrl = `https://api.whatsapp.com/send?phone=${shopWhatsApp}&text=${encodedText}`;
-
-      // Open WhatsApp in new tab
-      window.open(whatsappUrl, '_blank');
-
-      // Clear state
       setCart([]);
       setIsCheckoutOpen(false);
-      setIsOrderSuccess(true);
-      
-      // Reset form
-      setCustomerName('');
-      setCustomerPhone('');
       setNotes('');
 
+      setActiveOrderId(savedOrder.id);
+      localStorage.setItem('satya_active_order_id', savedOrder.id);
+      setIsTrackerOpen(true);
+
+      if (user?.uid) {
+        await saveUserProfile(user.uid, {
+          name: customerName,
+          phone: customerPhone,
+          address: deliveryMethod === 'Cash on Delivery' ? customerAddress : profileAddress
+        });
+      }
     } catch (err) {
       console.error("Order submission failed:", err);
       alert("Failed to create order. Please check connection and try again.");
@@ -289,18 +490,58 @@ export default function StorePage() {
               </h1>
             </div>
           </div>
-          <button 
-            onClick={() => setIsCartOpen(true)}
-            className="relative p-3 bg-amber-50 border border-amber-100 hover:bg-amber-100/80 rounded-xl text-amber-700 transition-all duration-200 shadow-sm"
-            aria-label="Shopping Cart"
-          >
-            <ShoppingCart className="w-5 h-5" />
-            {getCartCount() > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-orange-600 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-md animate-bounce">
-                {getCartCount()}
-              </span>
+          
+          <div className="flex items-center gap-3">
+            {activeOrderId && (
+              <button
+                onClick={() => setIsTrackerOpen(true)}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 font-bold text-xs rounded-xl transition-colors duration-150"
+              >
+                <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping"></span>
+                <span>Track Order</span>
+              </button>
             )}
-          </button>
+
+            {user ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setDashboardTab('orders'); setIsDashboardOpen(true); }}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors shadow-sm"
+                >
+                  <User className="w-4 h-4 text-amber-500" />
+                  <span className="hidden sm:inline">My Account</span>
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="p-2.5 border border-slate-200 hover:bg-red-50 hover:border-red-100 text-red-500 hover:text-red-600 rounded-xl transition-colors shadow-sm"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4.5 h-4.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setIsSignUpMode(false); setIsForgotPassword(false); setAuthError(''); setAuthSuccess(''); setIsAuthModalOpen(true); }}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl transition-colors shadow-sm shadow-amber-500/10 animate-fade-in"
+              >
+                <User className="w-4 h-4" />
+                <span>Login</span>
+              </button>
+            )}
+
+            <button 
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-3 bg-amber-50 border border-amber-100 hover:bg-amber-100/80 rounded-xl text-amber-700 transition-all duration-200 shadow-sm"
+              aria-label="Shopping Cart"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              {getCartCount() > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-orange-600 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-md animate-bounce">
+                  {getCartCount()}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -319,8 +560,8 @@ export default function StorePage() {
           <div className="grid grid-cols-3 gap-4 mb-8 max-w-2xl mx-auto">
             {[
               { step: "1", icon: "🛍️", title: "Browse", desc: "Pick your items from the catalog" },
-              { step: "2", icon: "💬", title: "WhatsApp", desc: "Send your list to the store" },
-              { step: "3", icon: "✅", title: "Collect", desc: "Pick up your items at the counter" }
+              { step: "2", icon: "📦", title: "Order Now", desc: "Direct COD or Pickup order" },
+              { step: "3", icon: "🕒", title: "Track", desc: "Watch live status updates" }
             ].map(({ step, icon, title, desc }) => (
               <div key={step} className="text-center bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col items-center gap-2">
                 <div className="w-10 h-10 bg-amber-50 border border-amber-200 rounded-full flex items-center justify-center text-xl">{icon}</div>
@@ -334,11 +575,11 @@ export default function StorePage() {
           <div className="sm:flex sm:items-start sm:justify-between gap-8">
           <div className="max-w-2xl">
             <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Browse. Send on <span className="text-emerald-600">WhatsApp.</span><br className="hidden sm:inline" />
-              <span className="text-amber-500">Collect at Counter.</span>
+              Browse. Order Online.<br className="hidden sm:inline" />
+              <span className="text-amber-500">Track Live Status.</span>
             </h2>
             <p className="mt-3 text-base text-slate-500 max-w-lg">
-              You're here at Satya General Store! Pick the items you need, add them to your cart, and tap <strong>"Send on WhatsApp"</strong> — the store will pack your order and it'll be ready at the counter.
+              You're here at Satya General Store! Add the items you need to your cart, click <strong>"Order Now"</strong>, choose COD or Pickup, and track your order's progress in real-time.
             </p>
           </div>
 
@@ -349,16 +590,14 @@ export default function StorePage() {
               Store Info
             </h3>
             <a
-              href={`https://wa.me/919603655683`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 p-3 rounded-xl transition-colors duration-150 group"
+              href="tel:+919603655683"
+              className="flex items-center gap-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 p-3 rounded-xl transition-colors duration-150 group"
             >
-              <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24"><path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.945 9.945 0 004.777 1.21h.005c5.505 0 9.99-4.478 9.99-9.986 0-2.67-1.037-5.178-2.924-7.066A9.919 9.919 0 0012.012 2z"/></svg>
+              <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center shrink-0">
+                <Phone className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">WhatsApp / Call</p>
+                <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider">Call Store</p>
                 <p className="text-sm font-bold text-slate-800">+91 96036 55683</p>
               </div>
             </a>
@@ -686,10 +925,10 @@ export default function StorePage() {
                       </button>
                       <button
                         onClick={() => setIsCheckoutOpen(true)}
-                        className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-colors duration-150"
+                        className="py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition-colors duration-150"
                       >
-                        <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24"><path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.945 9.945 0 004.777 1.21h.005c5.505 0 9.99-4.478 9.99-9.986 0-2.67-1.037-5.178-2.924-7.066A9.919 9.919 0 0012.012 2z"/></svg>
-                        <span>Send on WhatsApp</span>
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Order Now</span>
                       </button>
                     </div>
                   </div>
@@ -719,15 +958,53 @@ export default function StorePage() {
             </button>
 
             <h3 className="font-display font-bold text-xl text-slate-900 mb-1 flex items-center gap-2">
-              <span>💬 Send Order on WhatsApp</span>
+              <span>🛍️ Checkout details</span>
             </h3>
-            <p className="text-slate-500 text-xs mb-5">Tell the store who you are. Your item list will be sent on WhatsApp — just show this message and collect at the counter!</p>
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-5">
-              <span className="text-amber-500 text-base">📍</span>
-              <p className="text-amber-800 text-xs font-semibold">Walk-in Pickup — Collect your items at the counter</p>
-            </div>
+            <p className="text-slate-500 text-xs mb-5">Provide your details to submit your order directly to the store.</p>
 
             <form onSubmit={handleCheckoutSubmit} className="space-y-4">
+              
+              {/* Delivery Option Selector */}
+              <div className="space-y-2">
+                <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider">
+                  Delivery Option
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMethod('Take Away');
+                      setPaymentMethod('Cash at Counter');
+                    }}
+                    className={`p-3.5 border rounded-xl flex flex-col items-center justify-center text-center gap-1 transition-all ${
+                      deliveryMethod === 'Take Away'
+                        ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <span className="text-lg">🛍️</span>
+                    <span className="text-xs font-bold">Take Away</span>
+                    <span className="text-[10px] text-slate-400 font-semibold">(Free Pickup)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMethod('Cash on Delivery');
+                      setPaymentMethod('Cash on Delivery');
+                    }}
+                    className={`p-3.5 border rounded-xl flex flex-col items-center justify-center text-center gap-1 transition-all ${
+                      deliveryMethod === 'Cash on Delivery'
+                        ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <span className="text-lg">🛵</span>
+                    <span className="text-xs font-bold">Cash on Delivery</span>
+                    <span className="text-[10px] text-orange-600 font-bold">(+₹30 Delivery Fee)</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="name">
                   Full Name
@@ -770,19 +1047,46 @@ export default function StorePage() {
                 </div>
               </div>
 
+              {/* Conditionally display address input if COD selected */}
+              {deliveryMethod === 'Cash on Delivery' && (
+                <div>
+                  <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="address">
+                    Delivery Address
+                  </label>
+                  <textarea
+                    id="address"
+                    required
+                    rows="3"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
+                    placeholder="Your complete address (e.g. flat, building, street, landmark)..."
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">
-                    Payment at Counter
+                    Payment Method
                   </label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                  >
-                    <option value="Cash at Counter">Cash at Counter</option>
-                    <option value="UPI at Counter">UPI at Counter</option>
-                  </select>
+                  {deliveryMethod === 'Cash on Delivery' ? (
+                    <input
+                      type="text"
+                      readOnly
+                      className="w-full bg-slate-100 border border-slate-200 text-slate-500 px-3.5 py-2.5 rounded-xl text-sm select-none"
+                      value="Cash on Delivery"
+                    />
+                  ) : (
+                    <select
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all duration-150"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                    >
+                      <option value="Cash at Counter">Cash at Counter</option>
+                      <option value="UPI at Counter">UPI at Counter</option>
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="notes">
@@ -813,9 +1117,21 @@ export default function StorePage() {
                     </div>
                   ))}
                 </div>
+                <div className="border-t border-slate-200/60 pt-2 mt-2 space-y-1.5 text-xs text-slate-600">
+                  <div className="flex justify-between">
+                    <span>Items Subtotal</span>
+                    <span className="font-bold text-slate-800">₹{getCartTotal()}</span>
+                  </div>
+                  {deliveryMethod === 'Cash on Delivery' && (
+                    <div className="flex justify-between text-orange-600 font-semibold">
+                      <span>Delivery Fee</span>
+                      <span>+₹30</span>
+                    </div>
+                  )}
+                </div>
                 <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between text-sm font-extrabold text-slate-950">
                   <span>Grand Total</span>
-                  <span>₹{getCartTotal()}</span>
+                  <span>₹{getCartTotal() + (deliveryMethod === 'Cash on Delivery' ? 30 : 0)}</span>
                 </div>
               </div>
 
@@ -829,12 +1145,10 @@ export default function StorePage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all duration-150"
+                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition-all duration-150"
                 >
-                  <svg className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
-                    <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.945 9.945 0 004.777 1.21h.005c5.505 0 9.99-4.478 9.99-9.986 0-2.67-1.037-5.178-2.924-7.066A9.919 9.919 0 0012.012 2zm5.71 14.159c-.25.705-1.485 1.34-2.044 1.43-.509.083-1.176.101-1.892-.128a10.297 10.297 0 01-4.225-2.73 11.332 11.332 0 01-2.923-4.52c-.328-.865-.333-1.662-.1-2.072.23-.404.722-.509.972-.509.25 0 .5-.005.717.009.227.014.526-.086.818.618.3.722 1.022 2.49 1.109 2.668.088.177.147.382.029.614-.117.23-.254.382-.397.55-.142.167-.3.35-.429.477-.142.14-.29.294-.125.578.165.284.733 1.209 1.572 1.958.839.749 1.543 1.035 1.892 1.226.35.191.554.162.76-.08.206-.24.878-1.02 1.113-1.371.236-.352.47-.294.79-.176.324.118 2.059 1.01 2.441 1.201.382.191.637.284.73.446.093.162.093.935-.157 1.64z"/>
-                  </svg>
-                  <span>Order on WhatsApp</span>
+                  <CheckCircle className="w-5 h-5 shrink-0" />
+                  <span>Confirm Order</span>
                 </button>
               </div>
             </form>
@@ -842,30 +1156,645 @@ export default function StorePage() {
         </div>
       )}
 
-      {/* Order Success Dialog */}
-      {isOrderSuccess && (
+      {/* User Auth Modal */}
+      {isAuthModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            onClick={() => setIsOrderSuccess(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-          ></div>
-          <div className="relative w-full max-w-sm bg-white rounded-2xl border border-slate-100 shadow-2xl p-6 text-center space-y-3">
-            <div className="text-5xl">✅</div>
-            <h3 className="font-display font-bold text-xl text-slate-900">Order Sent on WhatsApp!</h3>
-            <p className="text-slate-500 text-sm">
-              Your item list has been sent to Satya General Store on WhatsApp. Head to the counter — your order will be ready for pickup!
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 text-xs font-semibold flex items-center gap-2">
-              <span>📍</span> Collect your items at the counter
-            </div>
-            <button
-              onClick={() => setIsOrderSuccess(false)}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors duration-150"
-            >
-              Continue Shopping
+          <div onClick={() => setIsAuthModalOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+          <div className="relative w-full max-w-md bg-white rounded-2xl border border-slate-100 shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+            <button onClick={() => setIsAuthModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+              <X className="w-5 h-5" />
             </button>
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <User className="w-6 h-6" />
+              </div>
+              <h3 className="font-display font-bold text-xl text-slate-900">
+                {isForgotPassword ? 'Reset Password' : isSignUpMode ? 'Create Account' : 'Welcome Back'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {isForgotPassword ? 'Enter your email to receive a password reset link' : isSignUpMode ? 'Register to manage orders and profile' : 'Sign in to access your orders dashboard'}
+              </p>
+            </div>
+
+            {authError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+            {authSuccess && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs rounded-xl flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>{authSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {isSignUpMode && !isForgotPassword && (
+                <>
+                  <div>
+                    <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="E.g., Syam Kumar"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      required
+                      pattern="[6-9][0-9]{9}"
+                      title="Enter a valid 10-digit mobile number"
+                      placeholder="E.g., 9876543210"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all"
+                      value={authPhone}
+                      onChange={(e) => setAuthPhone(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Default Delivery Address (Optional)</label>
+                    <textarea
+                      placeholder="E.g., Flat 101, Satya Apartments..."
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2 rounded-xl outline-none text-sm transition-all"
+                      rows="2"
+                      value={authAddress}
+                      onChange={(e) => setAuthAddress(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Email Address</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 pl-10 pr-4 py-2.5 rounded-xl outline-none text-sm transition-all"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {!isForgotPassword && (
+                <div>
+                  <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Password</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 pl-10 pr-4 py-2.5 rounded-xl outline-none text-sm transition-all"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-amber-500/10"
+              >
+                {isForgotPassword ? 'Send Reset Link' : isSignUpMode ? 'Register Account' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 text-center text-xs text-slate-500 space-y-2">
+              {!isForgotPassword && !isSignUpMode && (
+                <>
+                  <button onClick={() => { setIsForgotPassword(true); setAuthError(''); setAuthSuccess(''); }} className="text-amber-600 hover:underline font-semibold block mx-auto">
+                    Forgot Password?
+                  </button>
+                  <p>
+                    Don't have an account?{' '}
+                    <button onClick={() => { setIsSignUpMode(true); setAuthError(''); setAuthSuccess(''); }} className="text-amber-600 hover:underline font-bold">
+                      Sign Up
+                    </button>
+                  </p>
+                </>
+              )}
+              {isSignUpMode && (
+                <p>
+                  Already have an account?{' '}
+                  <button onClick={() => { setIsSignUpMode(false); setAuthError(''); setAuthSuccess(''); }} className="text-amber-600 hover:underline font-bold">
+                    Sign In
+                  </button>
+                </p>
+              )}
+              {isForgotPassword && (
+                <button onClick={() => { setIsForgotPassword(false); setAuthError(''); setAuthSuccess(''); }} className="text-amber-600 hover:underline font-semibold block mx-auto">
+                  Back to Sign In
+                </button>
+              )}
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Customer Dashboard Modal */}
+      {isDashboardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setIsDashboardOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+          <div className="relative w-full max-w-3xl bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-6 text-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-display font-extrabold text-xl">Customer Account</h3>
+                <p className="text-xs text-amber-50/80 mt-0.5">{user?.email}</p>
+              </div>
+              <button onClick={() => setIsDashboardOpen(false)} className="p-2 hover:bg-white/10 rounded-xl text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-slate-100 shrink-0">
+              <button
+                onClick={() => setDashboardTab('orders')}
+                className={`flex-1 py-4 text-center text-sm font-bold border-b-2 transition-all ${
+                  dashboardTab === 'orders' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Order History
+              </button>
+              <button
+                onClick={() => setDashboardTab('profile')}
+                className={`flex-1 py-4 text-center text-sm font-bold border-b-2 transition-all ${
+                  dashboardTab === 'profile' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Profile Settings
+              </button>
+            </div>
+
+            {/* Content Container (Scrollable) */}
+            <div className="flex-grow overflow-y-auto p-6 bg-slate-50 animate-fade-in">
+              
+              {/* ORDERS TAB */}
+              {dashboardTab === 'orders' && (
+                <div className="space-y-4">
+                  {loadingOrders ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                      <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                      <p className="text-xs">Loading your orders...</p>
+                    </div>
+                  ) : userOrders.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 bg-white rounded-2xl border border-slate-100 p-8 shadow-sm">
+                      <History className="w-12 h-12 text-slate-300 mx-auto mb-3 animate-bounce-subtle" />
+                      <p className="font-semibold text-slate-700">No orders found</p>
+                      <p className="text-xs text-slate-400 mt-1">When you place orders, they will show up here.</p>
+                    </div>
+                  ) : (
+                    userOrders.map((ord) => (
+                      <div key={ord.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-200 hover:shadow-md transition-all">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                          <div>
+                            <span className="text-xs font-black text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">ID: {ord.id}</span>
+                            <span className="text-[11px] text-slate-400 font-semibold block sm:inline sm:ml-3">
+                              {new Date(ord.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                            ord.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                            ord.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                            ord.status === 'Getting Ready' ? 'bg-blue-100 text-blue-800' :
+                            'bg-amber-100 text-amber-800' // Order Received
+                          }`}>
+                            {ord.status}
+                          </span>
+                        </div>
+
+                        {/* Summary breakdown */}
+                        <div className="text-xs text-slate-600 space-y-1">
+                          <p className="font-bold text-slate-700 mb-2">Items Ordered:</p>
+                          {ord.items.map((it, idx) => (
+                            <div key={idx} className="flex justify-between max-w-md bg-slate-50/50 px-3 py-1.5 rounded-lg mb-1">
+                              <span>{it.productName} ({it.volume}) x{it.quantity}</span>
+                              <span className="font-semibold text-slate-800">₹{it.price * it.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          <div>
+                            <span className="text-slate-400 font-semibold">Total: </span>
+                            <span className="font-extrabold text-sm text-slate-900">₹{ord.total}</span>
+                            <span className="text-[10px] text-slate-400 ml-2">({ord.deliveryMethod})</span>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { setSelectedInvoiceOrder(ord); }}
+                              className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                              <Receipt className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Invoice</span>
+                            </button>
+                            {ord.status !== 'Delivered' && ord.status !== 'Cancelled' && (
+                              <button
+                                onClick={() => { setActiveOrderId(ord.id); setIsTrackerOpen(true); }}
+                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                              >
+                                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
+                                <span>Track Live</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* PROFILE TAB */}
+              {dashboardTab === 'profile' && (
+                <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                  {isProfileEditing ? (
+                    <form onSubmit={handleProfileUpdate} className="space-y-4">
+                      <div>
+                        <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Full Name</label>
+                        <input
+                          type="text"
+                          required
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all"
+                          value={profileName}
+                          onChange={(e) => setProfileName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Phone Number</label>
+                        <input
+                          type="tel"
+                          required
+                          pattern="[6-9][0-9]{9}"
+                          title="Enter a valid 10-digit mobile number"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all"
+                          value={profilePhone}
+                          onChange={(e) => setProfilePhone(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1">Default Delivery Address</label>
+                        <textarea
+                          rows="3"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white text-slate-950 px-3.5 py-2.5 rounded-xl outline-none text-sm transition-all"
+                          placeholder="Your complete address..."
+                          value={profileAddress}
+                          onChange={(e) => setProfileAddress(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsProfileEditing(false)}
+                          className="flex-1 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold rounded-xl text-sm transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
+                        >
+                          Save Profile
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-6 animate-fade-in">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Full Name</p>
+                          <p className="text-sm font-semibold text-slate-800 mt-0.5">{profileName || '(Not set)'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Phone Number</p>
+                          <p className="text-sm font-semibold text-slate-800 mt-0.5">{profilePhone || '(Not set)'}</p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Default Delivery Address</p>
+                          <p className="text-sm font-semibold text-slate-800 mt-0.5 whitespace-pre-wrap bg-slate-50 border border-slate-100 p-3.5 rounded-xl leading-relaxed">{profileAddress || '(Not set)'}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsProfileEditing(true)}
+                        className="w-full py-2.5 border border-amber-200 hover:border-amber-300 text-amber-600 hover:bg-amber-50/50 font-bold rounded-xl text-sm transition-colors text-center shadow-sm"
+                      >
+                        Edit Profile Details
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Order Tracker Modal */}
+      {isTrackerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setIsTrackerOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+          <div className="relative w-full max-w-lg bg-white rounded-3xl border border-slate-100 shadow-2xl p-6 text-center overflow-y-auto max-h-[90vh]">
+            <button
+              onClick={() => setIsTrackerOpen(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {activeOrder ? (
+              <div className="space-y-6">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-black rounded-full uppercase tracking-wider mb-2">
+                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping"></span>
+                    Live Tracking Active
+                  </span>
+                  <h3 className="font-display font-extrabold text-xl text-slate-900">Order Status Tracker</h3>
+                  <p className="text-xs text-slate-400 mt-1">Order ID: <span className="font-mono font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md">{activeOrder.id}</span></p>
+                </div>
+
+                {/* Vertical Stepper representing status */}
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 max-w-sm mx-auto space-y-6 text-left">
+                  {[
+                    {
+                      label: 'Order Received',
+                      desc: 'Shop has received your order details',
+                      icon: '📥',
+                      active: true,
+                      done: activeOrder.status === 'Order Received' || activeOrder.status === 'Getting Ready' || activeOrder.status === 'Delivered'
+                    },
+                    {
+                      label: 'Getting Ready',
+                      desc: 'Items are being packed and verified',
+                      icon: '📦',
+                      active: activeOrder.status === 'Getting Ready' || activeOrder.status === 'Delivered',
+                      done: activeOrder.status === 'Getting Ready' || activeOrder.status === 'Delivered'
+                    },
+                    {
+                      label: 'Delivered',
+                      desc: activeOrder.deliveryMethod === 'Cash on Delivery' ? 'Our rider has delivered your order' : 'Your order is ready to collect at counter',
+                      icon: activeOrder.deliveryMethod === 'Cash on Delivery' ? '🛵' : '✅',
+                      active: activeOrder.status === 'Delivered',
+                      done: activeOrder.status === 'Delivered'
+                    }
+                  ].map((step, idx) => {
+                    const isCurrent = activeOrder.status === step.label;
+                    return (
+                      <div key={idx} className="flex gap-4 items-start relative last:pb-0">
+                        {idx < 2 && (
+                          <div className={`absolute left-5 top-10 bottom-0 w-0.5 -mt-2 -mb-6 ${
+                            step.done && (idx === 0 ? (activeOrder.status === 'Getting Ready' || activeOrder.status === 'Delivered') : activeOrder.status === 'Delivered')
+                              ? 'bg-emerald-500' : 'bg-slate-200'
+                          }`} />
+                        )}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 font-bold text-base shadow-sm z-10 transition-all ${
+                          isCurrent ? 'bg-amber-500 border-amber-500 text-white ring-4 ring-amber-100 animate-pulse-subtle' :
+                          step.done ? 'bg-emerald-500 border-emerald-500 text-white' :
+                          'bg-white border-slate-200 text-slate-400'
+                        }`}>
+                          {step.done ? '✓' : step.icon}
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className={`text-sm font-bold ${isCurrent ? 'text-amber-600' : step.done ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {step.label}
+                          </p>
+                          <p className="text-[11px] text-slate-500 leading-tight">{step.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {activeOrder.status === 'Cancelled' && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-xs font-bold flex items-center gap-2 text-left">
+                    <span className="text-base">❌</span>
+                    <span>This order has been cancelled by Satya General Store. Please contact the shop.</span>
+                  </div>
+                )}
+
+                {/* Collection details summary */}
+                <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-left text-xs space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Payment Mode:</span>
+                    <span className="font-bold text-slate-800">{activeOrder.paymentMethod}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Method:</span>
+                    <span className="font-bold text-slate-800">{activeOrder.deliveryMethod}</span>
+                  </div>
+                  {activeOrder.deliveryMethod === 'Cash on Delivery' && (
+                    <div className="border-t border-slate-200/60 pt-2">
+                      <span className="text-slate-400 font-semibold block mb-0.5">Delivery Address:</span>
+                      <p className="font-bold text-slate-800 bg-white border border-slate-100 p-2.5 rounded-lg leading-tight">{activeOrder.customer.address}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setSelectedInvoiceOrder(activeOrder); }}
+                    className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Receipt className="w-4 h-4 text-slate-400" />
+                    <span>View Invoice</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsTrackerOpen(false);
+                      if (activeOrder.status === 'Delivered' || activeOrder.status === 'Cancelled') {
+                        localStorage.removeItem('satya_active_order_id');
+                        setActiveOrderId(null);
+                      }
+                    }}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors shadow-sm shadow-amber-500/10"
+                  >
+                    Close Tracker
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-slate-400">
+                <p>Loading order details...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Printable Invoice Modal */}
+      {selectedInvoiceOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:p-0 print:absolute print:inset-0 bg-slate-900/60 backdrop-blur-sm print:bg-white print:backdrop-blur-none">
+          <div onClick={() => setSelectedInvoiceOrder(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm print:hidden"></div>
+          <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-slate-100 shadow-2xl p-8 overflow-y-auto max-h-[90vh] print:max-h-full print:shadow-none print:border-0 print:rounded-none flex flex-col justify-between print-invoice-container">
+            <button
+              onClick={() => setSelectedInvoiceOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-xl print:hidden"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Print CSS Injector */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                .print-invoice-container, .print-invoice-container * {
+                  visibility: visible !important;
+                }
+                .print-invoice-container {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                }
+              }
+            `}} />
+
+            {/* Invoice Content */}
+            <div className="space-y-6 print:space-y-4">
+              
+              {/* Invoice Header */}
+              <div className="flex justify-between items-start border-b border-slate-200 pb-5">
+                <div>
+                  <h2 className="font-display font-extrabold text-2xl text-slate-900 tracking-tight">Satya General Store</h2>
+                  <p className="text-xs text-slate-500 mt-1">Visakhapatnam, Andhra Pradesh</p>
+                  <p className="text-xs text-slate-500">Phone: +91 96036 55683</p>
+                </div>
+                <div className="text-right">
+                  <h3 className="font-bold text-lg text-amber-500 uppercase tracking-widest">Invoice</h3>
+                  <p className="text-xs text-slate-500 mt-1">Order Ref: <span className="font-bold text-slate-800">{selectedInvoiceOrder.id}</span></p>
+                  <p className="text-xs text-slate-500">Date: {new Date(selectedInvoiceOrder.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {/* Billed To / Delivery Details */}
+              <div className="grid grid-cols-2 gap-6 text-xs bg-slate-50 p-4 rounded-2xl print:bg-slate-50/50">
+                <div>
+                  <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Billed To</p>
+                  <p className="font-bold text-slate-800 text-sm mt-1">{selectedInvoiceOrder.customer.name}</p>
+                  <p className="text-slate-600 mt-0.5">{selectedInvoiceOrder.customer.phone}</p>
+                  {selectedInvoiceOrder.customer.email && (
+                    <p className="text-slate-600">{selectedInvoiceOrder.customer.email}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Order Details</p>
+                  <p className="font-semibold text-slate-800 mt-1">Method: {selectedInvoiceOrder.deliveryMethod}</p>
+                  <p className="text-slate-600">Payment: {selectedInvoiceOrder.paymentMethod}</p>
+                  {selectedInvoiceOrder.deliveryMethod === 'Cash on Delivery' && (
+                    <div className="mt-2 pt-1.5 border-t border-slate-200">
+                      <p className="font-semibold text-slate-400 text-[10px] uppercase">Delivery Address</p>
+                      <p className="text-slate-700 leading-tight mt-0.5">{selectedInvoiceOrder.customer.address}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Table of Items */}
+              <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-3.5">Product Details</th>
+                      <th className="p-3.5 text-center">Qty</th>
+                      <th className="p-3.5 text-right">Price</th>
+                      <th className="p-3.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedInvoiceOrder.items.map((it, idx) => (
+                      <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                        <td className="p-3.5">
+                          <p className="font-bold text-slate-800">{it.productName}</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">{it.volume}</p>
+                        </td>
+                        <td className="p-3.5 text-center font-bold text-slate-700">{it.quantity}</td>
+                        <td className="p-3.5 text-right text-slate-600">₹{it.price}</td>
+                        <td className="p-3.5 text-right font-bold text-slate-800">₹{it.price * it.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total calculations */}
+              <div className="flex justify-end pt-2">
+                <div className="w-72 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Items Subtotal:</span>
+                    <span className="font-semibold">₹{selectedInvoiceOrder.total - (selectedInvoiceOrder.deliveryFee || 0)}</span>
+                  </div>
+                  {selectedInvoiceOrder.deliveryFee > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Delivery Fee (COD):</span>
+                      <span className="font-semibold text-orange-600">+₹{selectedInvoiceOrder.deliveryFee}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-extrabold text-slate-900">
+                    <span>Grand Total:</span>
+                    <span>₹{selectedInvoiceOrder.total}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-8 border-t border-slate-100 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                Thank you for shopping at Satya General Store! 🙏
+              </div>
+            </div>
+
+            {/* Actions (hidden when printing) */}
+            <div className="flex gap-3 pt-6 border-t border-slate-100 mt-6 print:hidden">
+              <button
+                onClick={() => setSelectedInvoiceOrder(null)}
+                className="flex-grow py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors text-center"
+              >
+                Close Invoice
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex-grow py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-amber-500/10"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Invoice</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Track Order Button */}
+      {activeOrderId && !isTrackerOpen && (
+        <button
+          onClick={() => setIsTrackerOpen(true)}
+          className="fixed bottom-6 right-6 z-40 bg-rose-500 hover:bg-rose-600 text-white font-bold px-4 py-3 rounded-full shadow-lg shadow-rose-500/30 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 duration-150 animate-bounce-subtle"
+        >
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-100 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-200"></span>
+          </span>
+          <span className="text-xs">Track Active Order</span>
+        </button>
       )}
 
       {/* Footer */}
@@ -876,9 +1805,9 @@ export default function StorePage() {
             <p className="text-xs text-slate-500 mt-1">© {new Date().getFullYear()} Satya General Store. All rights reserved.</p>
           </div>
           <div className="flex justify-center gap-4 text-xs">
-            <span className="text-slate-500">Browse · WhatsApp · Collect</span>
+            <span className="text-slate-500">Browse · Order Online · Track Status</span>
             <span className="text-slate-600">|</span>
-            <span className="text-slate-500">Walk-in Takeaway Store</span>
+            <span className="text-slate-500">Walk-in & Home Delivery Store</span>
           </div>
         </div>
       </footer>
