@@ -127,6 +127,36 @@ export default function StorePage() {
   const [paymentMethod, setPaymentMethod] = useState('Cash at Counter');
   const [notes, setNotes] = useState('');
 
+  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true });
+
+  useEffect(() => {
+    const settingsRef = doc(db, 'settings', 'store');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setStoreSettings({
+          takeawayEnabled: data.takeawayEnabled !== false,
+          deliveryEnabled: data.deliveryEnabled !== false,
+        });
+      } else {
+        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true });
+      }
+    }, (err) => {
+      console.error("Failed to sync settings on store page:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!storeSettings.takeawayEnabled && deliveryMethod === 'Take Away') {
+      setDeliveryMethod('Cash on Delivery');
+      setPaymentMethod('Cash on Delivery');
+    } else if (!storeSettings.deliveryEnabled && deliveryMethod === 'Cash on Delivery') {
+      setDeliveryMethod('Take Away');
+      setPaymentMethod('Cash at Counter');
+    }
+  }, [storeSettings, deliveryMethod]);
+
   // Live Tracking State
   const [activeOrderId, setActiveOrderId] = useState(() => {
     return localStorage.getItem('satya_active_order_id') || null;
@@ -667,6 +697,19 @@ export default function StorePage() {
 
         {/* Catalog Section */}
         <div className="flex-grow min-w-0 space-y-5">
+          {/* Banner for store closed/ordering paused */}
+          {!storeSettings.takeawayEnabled && !storeSettings.deliveryEnabled && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-fade-in">
+              <span className="text-xl">⚠️</span>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Ordering is Temporarily Paused</h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  We are not accepting online orders at the moment. Please contact the store directly at <strong className="text-amber-700 font-semibold">+91 96036 55683</strong> to check availability.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Search Box */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
@@ -926,7 +969,12 @@ export default function StorePage() {
                       </button>
                       <button
                         onClick={() => setIsCheckoutOpen(true)}
-                        className="py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition-colors duration-150"
+                        disabled={!storeSettings.takeawayEnabled && !storeSettings.deliveryEnabled}
+                        className={`py-3 font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-colors duration-150 ${
+                          (!storeSettings.takeawayEnabled && !storeSettings.deliveryEnabled)
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                            : 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                        }`}
                       >
                         <ShoppingBag className="w-4 h-4" />
                         <span>Order Now</span>
@@ -973,35 +1021,45 @@ export default function StorePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
+                    disabled={!storeSettings.takeawayEnabled}
                     onClick={() => {
                       setDeliveryMethod('Take Away');
                       setPaymentMethod('Cash at Counter');
                     }}
                     className={`p-3.5 border rounded-xl flex flex-col items-center justify-center text-center gap-1 transition-all ${
-                      deliveryMethod === 'Take Away'
+                      !storeSettings.takeawayEnabled
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                        : deliveryMethod === 'Take Away'
                         ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20'
                         : 'border-slate-200 hover:bg-slate-50 text-slate-600'
                     }`}
                   >
                     <span className="text-lg">🛍️</span>
                     <span className="text-xs font-bold">Take Away</span>
-                    <span className="text-[10px] text-slate-400 font-semibold">(Free Pickup)</span>
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      {storeSettings.takeawayEnabled ? '(Free Pickup)' : 'Temporarily Offline'}
+                    </span>
                   </button>
                   <button
                     type="button"
+                    disabled={!storeSettings.deliveryEnabled}
                     onClick={() => {
                       setDeliveryMethod('Cash on Delivery');
                       setPaymentMethod('Cash on Delivery');
                     }}
                     className={`p-3.5 border rounded-xl flex flex-col items-center justify-center text-center gap-1 transition-all ${
-                      deliveryMethod === 'Cash on Delivery'
+                      !storeSettings.deliveryEnabled
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                        : deliveryMethod === 'Cash on Delivery'
                         ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20'
                         : 'border-slate-200 hover:bg-slate-50 text-slate-600'
                     }`}
                   >
                     <span className="text-lg">🛵</span>
                     <span className="text-xs font-bold">Cash on Delivery</span>
-                    <span className="text-[10px] text-orange-600 font-bold">(+₹30 Delivery Fee)</span>
+                    <span className="text-[10px] text-orange-600 font-bold">
+                      {storeSettings.deliveryEnabled ? '(+₹30 Delivery Fee)' : 'Temporarily Offline'}
+                    </span>
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, doc, setDoc } from 'firebase/firestore';
 import { 
   getItems, 
   saveItem, 
@@ -47,10 +47,43 @@ const CATEGORIES = [
 export default function AdminPage({ onLogout }) {
   const [activeTab, setActiveTab] = useState('orders');
   const [items, setItems] = useState([]);
+  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true });
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const settingsRef = doc(db, 'settings', 'store');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setStoreSettings({
+          takeawayEnabled: data.takeawayEnabled !== false,
+          deliveryEnabled: data.deliveryEnabled !== false,
+        });
+      } else {
+        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true });
+      }
+    }, (err) => {
+      console.error("Failed to sync settings in admin panel:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const toggleOption = async (option) => {
+    try {
+      playClickSound('success');
+      const settingsRef = doc(db, 'settings', 'store');
+      const updatedValue = !storeSettings[option === 'takeaway' ? 'takeawayEnabled' : 'deliveryEnabled'];
+      await setDoc(settingsRef, {
+        [option === 'takeaway' ? 'takeawayEnabled' : 'deliveryEnabled']: updatedValue
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to toggle option:", err);
+      alert("Failed to save changes. Please try again.");
+    }
+  };
 
   // Invoice View Modal state
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
@@ -915,6 +948,53 @@ export default function AdminPage({ onLogout }) {
                 </div>
 
 
+
+                {/* Store Fulfillment Options */}
+                <div className="space-y-4 bg-slate-900/30 p-6 rounded-2xl border border-slate-800">
+                  <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                    <SettingsIcon className="w-5 h-5 text-amber-500" />
+                    <span>Order Fulfillment Options</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Enable or disable takeaway and delivery options for customers. Disabling an option will temporarily prevent customers from selecting it at checkout.
+                  </p>
+                  
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between p-3.5 bg-slate-900/40 rounded-xl border border-slate-800">
+                      <div>
+                        <span className="font-bold text-sm text-white block">🛍️ Take Away (Pickup)</span>
+                        <span className="text-xs text-slate-500">Allow customers to place orders for pickup at counter.</span>
+                      </div>
+                      <button
+                        onClick={() => toggleOption('takeaway')}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors duration-250 shrink-0 ${
+                          storeSettings.takeawayEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div className={`bg-white w-4 h-4 rounded-full transition-transform duration-250 ${
+                          storeSettings.takeawayEnabled ? 'translate-x-6' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3.5 bg-slate-900/40 rounded-xl border border-slate-800">
+                      <div>
+                        <span className="font-bold text-sm text-white block">🛵 Cash on Delivery (COD)</span>
+                        <span className="text-xs text-slate-500">Allow customers to request home delivery.</span>
+                      </div>
+                      <button
+                        onClick={() => toggleOption('delivery')}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors duration-250 shrink-0 ${
+                          storeSettings.deliveryEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div className={`bg-white w-4 h-4 rounded-full transition-transform duration-250 ${
+                          storeSettings.deliveryEnabled ? 'translate-x-6' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Database seeding */}
                 <div className="space-y-4 bg-slate-900/30 p-6 rounded-2xl border border-slate-800">
