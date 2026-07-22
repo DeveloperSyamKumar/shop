@@ -47,7 +47,7 @@ const CATEGORIES = [
 export default function AdminPage({ onLogout }) {
   const [activeTab, setActiveTab] = useState('orders');
   const [items, setItems] = useState([]);
-  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true });
+  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true, buyingEnabled: true });
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,9 +61,10 @@ export default function AdminPage({ onLogout }) {
         setStoreSettings({
           takeawayEnabled: data.takeawayEnabled !== false,
           deliveryEnabled: data.deliveryEnabled !== false,
+          buyingEnabled: data.buyingEnabled !== false,
         });
       } else {
-        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true });
+        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true, buyingEnabled: true });
       }
     }, (err) => {
       console.error("Failed to sync settings in admin panel:", err);
@@ -75,10 +76,12 @@ export default function AdminPage({ onLogout }) {
     try {
       playClickSound('success');
       const settingsRef = doc(db, 'settings', 'store');
-      const updatedValue = !storeSettings[option === 'takeaway' ? 'takeawayEnabled' : 'deliveryEnabled'];
-      await setDoc(settingsRef, {
-        [option === 'takeaway' ? 'takeawayEnabled' : 'deliveryEnabled']: updatedValue
-      }, { merge: true });
+      let key;
+      if (option === 'takeaway') key = 'takeawayEnabled';
+      else if (option === 'delivery') key = 'deliveryEnabled';
+      else key = 'buyingEnabled';
+      const updatedValue = !storeSettings[key];
+      await setDoc(settingsRef, { [key]: updatedValue }, { merge: true });
     } catch (err) {
       console.error("Failed to toggle option:", err);
       alert("Failed to save changes. Please try again.");
@@ -948,6 +951,50 @@ export default function AdminPage({ onLogout }) {
                 </div>
 
 
+
+                {/* Buying Enabled Master Toggle */}
+                <div className={`space-y-4 p-6 rounded-2xl border-2 transition-all duration-300 ${
+                  storeSettings.buyingEnabled
+                    ? 'bg-emerald-500/5 border-emerald-500/30'
+                    : 'bg-red-500/5 border-red-500/30'
+                }`}>
+                  <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                    <span className="text-lg">{storeSettings.buyingEnabled ? '🛒' : '🚫'}</span>
+                    <span>Customer Buying Options</span>
+                    <span className={`ml-auto text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                      storeSettings.buyingEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {storeSettings.buyingEnabled ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Master switch for all buying actions. When <strong className="text-white">disabled</strong>, customers can only browse product details and prices — the Add to Cart button, cart drawer, and checkout are completely hidden. When <strong className="text-white">enabled</strong>, customers can proceed with placing orders.
+                  </p>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-slate-800 gap-4">
+                    <div>
+                      <span className={`font-bold text-sm block ${
+                        storeSettings.buyingEnabled ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {storeSettings.buyingEnabled ? '✅ Buying is currently ACTIVE' : '⛔ Buying is currently PAUSED'}
+                      </span>
+                      <span className="text-xs text-slate-500 mt-0.5 block">
+                        {storeSettings.buyingEnabled
+                          ? 'Customers can add items to cart and place orders.'
+                          : 'Customers can only view products and prices — no ordering allowed.'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => toggleOption('buying')}
+                      className={`w-14 h-7 rounded-full p-1 transition-colors duration-300 shrink-0 shadow-inner ${
+                        storeSettings.buyingEnabled ? 'bg-emerald-500' : 'bg-red-500/60'
+                      }`}
+                    >
+                      <div className={`bg-white w-5 h-5 rounded-full shadow transition-transform duration-300 ${
+                        storeSettings.buyingEnabled ? 'translate-x-7' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
 
                 {/* Store Fulfillment Options */}
                 <div className="space-y-4 bg-slate-900/30 p-6 rounded-2xl border border-slate-800">

@@ -127,7 +127,7 @@ export default function StorePage() {
   const [paymentMethod, setPaymentMethod] = useState('Cash at Counter');
   const [notes, setNotes] = useState('');
 
-  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true });
+  const [storeSettings, setStoreSettings] = useState({ takeawayEnabled: true, deliveryEnabled: true, buyingEnabled: true });
 
   useEffect(() => {
     const settingsRef = doc(db, 'settings', 'store');
@@ -137,9 +137,10 @@ export default function StorePage() {
         setStoreSettings({
           takeawayEnabled: data.takeawayEnabled !== false,
           deliveryEnabled: data.deliveryEnabled !== false,
+          buyingEnabled: data.buyingEnabled !== false,
         });
       } else {
-        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true });
+        setStoreSettings({ takeawayEnabled: true, deliveryEnabled: true, buyingEnabled: true });
       }
     }, (err) => {
       console.error("Failed to sync settings on store page:", err);
@@ -560,18 +561,21 @@ export default function StorePage() {
               </button>
             )}
 
-            <button 
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-3 bg-amber-50 border border-amber-100 hover:bg-amber-100/80 rounded-xl text-amber-700 transition-all duration-200 shadow-sm"
-              aria-label="Shopping Cart"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              {getCartCount() > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-orange-600 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-md animate-bounce">
-                  {getCartCount()}
-                </span>
-              )}
-            </button>
+            {/* Cart button — hidden when buying is disabled */}
+            {storeSettings.buyingEnabled && (
+              <button 
+                onClick={() => setIsCartOpen(true)}
+                className="relative p-3 bg-amber-50 border border-amber-100 hover:bg-amber-100/80 rounded-xl text-amber-700 transition-all duration-200 shadow-sm"
+                aria-label="Shopping Cart"
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {getCartCount() > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-orange-600 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-md animate-bounce">
+                    {getCartCount()}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -697,8 +701,21 @@ export default function StorePage() {
 
         {/* Catalog Section */}
         <div className="flex-grow min-w-0 space-y-5">
+          {/* View-Only Banner when buying is disabled */}
+          {!storeSettings.buyingEnabled && (
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-fade-in">
+              <span className="text-xl">👁️</span>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Browse Mode — View Only</h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Online ordering is currently not available. You can browse our full catalog and see prices. To place an order, contact us directly at <strong className="text-amber-700 font-semibold">+91 96036 55683</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Banner for store closed/ordering paused */}
-          {!storeSettings.takeawayEnabled && !storeSettings.deliveryEnabled && (
+          {!storeSettings.takeawayEnabled && !storeSettings.deliveryEnabled && storeSettings.buyingEnabled && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 shadow-sm animate-fade-in">
               <span className="text-xl">⚠️</span>
               <div>
@@ -832,13 +849,19 @@ export default function StorePage() {
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Price</span>
                         <span className="text-2xl font-extrabold text-slate-900 leading-tight">₹{currentVariant.price}</span>
                       </div>
-                      <button
-                        onClick={() => addToCart(item)}
-                        className="flex-1 max-w-[110px] px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 transition-all duration-150"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add</span>
-                      </button>
+                      {storeSettings.buyingEnabled ? (
+                        <button
+                          onClick={() => addToCart(item)}
+                          className="flex-1 max-w-[110px] px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 transition-all duration-150"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add</span>
+                        </button>
+                      ) : (
+                        <span className="flex-1 max-w-[110px] px-3 py-2 bg-slate-100 text-slate-400 font-semibold text-[11px] rounded-xl text-center border border-slate-200 leading-tight">
+                          👁️ View Only
+                        </span>
+                      )}
                     </div>
                   </article>
                 );
@@ -848,8 +871,8 @@ export default function StorePage() {
         </div>
       </main>
 
-      {/* Floating Cart Button for Mobile */}
-      {getCartCount() > 0 && !isCartOpen && (
+      {/* Floating Cart Button for Mobile — hidden when buying is disabled */}
+      {storeSettings.buyingEnabled && getCartCount() > 0 && !isCartOpen && (
         <button
           onClick={() => setIsCartOpen(true)}
           className="md:hidden fixed bottom-6 right-6 z-40 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border border-amber-400 animate-pulse"
